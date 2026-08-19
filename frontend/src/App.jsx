@@ -33,6 +33,7 @@ import NewInterviewPage     from '@/pages/interview/NewInterviewPage';
 import InterviewListPage    from '@/pages/interview/InterviewListPage';
 import InterviewSessionPage from '@/pages/interview/InterviewSessionPage';
 import SessionResultPage    from '@/pages/interview/SessionResultPage';
+import DSASessionPage       from '@/pages/interview/DSASessionPage';
 import SessionHistoryPage   from '@/pages/session/SessionHistoryPage';
 import ResumesPage          from '@/pages/resume/ResumesPage';
 import ProfilePage          from '@/pages/profile/ProfilePage';
@@ -182,6 +183,7 @@ export default function App() {
         <Route path="/interviews"                   element={<InterviewListPage />} />
         <Route path="/interviews/new"               element={<NewInterviewPage />} />
         <Route path="/interviews/:id/session"       element={<InterviewSessionPage />} />
+        <Route path="/dsa-session"                  element={<DSASessionPage />} />
         <Route path="/sessions/:id/results"         element={<SessionResultPage />} />
         <Route path="/sessions"                     element={<SessionHistoryPage />} />
         <Route path="/resumes"                      element={<ResumesPage />} />

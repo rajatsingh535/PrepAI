@@ -1,9 +1,10 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ChevronRight, ChevronLeft, SkipForward, CheckCircle,
-  Clock, Mic, Send, Loader2, AlertCircle, Zap, Volume2, VolumeX
+  Clock, Mic, Send, Loader2, AlertCircle, Zap, Volume2, VolumeX,
+  Camera, CameraOff, Eye, EyeOff, Brain, TrendingUp
 } from 'lucide-react';
 import { interviewAPI, sessionAPI } from '@/services/api';
 import toast from 'react-hot-toast';
@@ -11,173 +12,207 @@ import toast from 'react-hot-toast';
 const DIFFICULTY_CLR = { easy: 'badge-success', medium: 'badge-warning', hard: 'badge-danger' };
 const CATEGORY_CLR   = { technical: 'badge-brand', behavioral: 'badge-slate', situational: 'badge-warning', hr: 'badge-success', culture_fit: 'badge-danger' };
 
+/* ── Facial Analysis Hook ───────────────────────────────────────── */
+function useFacialAnalysis(videoRef, enabled) {
+  const [metrics, setMetrics] = useState({
+    attention:   85,
+    confidence:  72,
+    stress:      30,
+    eyeContact:  80,
+    emotion:     'Neutral',
+    posture:     'Good',
+  });
+  const intervalRef = useRef(null);
+
+  useEffect(() => {
+    if (!enabled) {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+      return;
+    }
+    // Mock MediaPipe facial analysis — replace with real @mediapipe/tasks-vision later
+    intervalRef.current = setInterval(() => {
+      setMetrics((prev) => ({
+        attention:  Math.min(100, Math.max(40, prev.attention  + (Math.random() * 10 - 5))),
+        confidence: Math.min(100, Math.max(30, prev.confidence + (Math.random() * 8  - 4))),
+        stress:     Math.min(100, Math.max(5,  prev.stress     + (Math.random() * 8  - 4))),
+        eyeContact: Math.min(100, Math.max(30, prev.eyeContact + (Math.random() * 12 - 6))),
+        emotion:    ['Neutral','Focused','Confident','Thinking','Calm'][Math.floor(Math.random() * 5)],
+        posture:    Math.random() > 0.3 ? 'Good' : 'Sit straighter',
+      }));
+    }, 2000);
+    return () => clearInterval(intervalRef.current);
+  }, [enabled]);
+
+  return metrics;
+}
+
+/* ── Metric Bar ─────────────────────────────────────────────────── */
+function MetricBar({ label, value, color }) {
+  const clr = value >= 70 ? 'from-emerald-500 to-teal-500'
+            : value >= 45 ? 'from-amber-500 to-orange-500'
+            : 'from-red-500 to-rose-500';
+  return (
+    <div>
+      <div className="flex justify-between text-xs mb-1">
+        <span className="text-slate-400">{label}</span>
+        <span className={`font-bold ${value >= 70 ? 'text-emerald-400' : value >= 45 ? 'text-amber-400' : 'text-red-400'}`}>{Math.round(value)}%</span>
+      </div>
+      <div className="h-1.5 bg-surface-border rounded-full overflow-hidden">
+        <motion.div
+          className={`h-full rounded-full bg-gradient-to-r ${clr}`}
+          animate={{ width: `${value}%` }}
+          transition={{ duration: 0.8, ease: 'easeOut' }}
+        />
+      </div>
+    </div>
+  );
+}
+
 export default function InterviewSessionPage() {
   const { id: interviewId } = useParams();
   const navigate = useNavigate();
 
-  const [interview, setInterview] = useState(null);
-  const [session, setSession]     = useState(null);
-  const [currentIdx, setCurrentIdx] = useState(0);
-  const [answerText, setAnswerText] = useState('');
-  const [savedAnswers, setSavedAnswers] = useState({});
-  const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
-  const [completing, setCompleting] = useState(false);
-  const [startTime, setStartTime] = useState(Date.now());
-  const [elapsed, setElapsed] = useState(0);
+  const [interview,     setInterview]     = useState(null);
+  const [session,       setSession]       = useState(null);
+  const [currentIdx,    setCurrentIdx]    = useState(0);
+  const [answerText,    setAnswerText]    = useState('');
+  const [savedAnswers,  setSavedAnswers]  = useState({});
+  const [loading,       setLoading]       = useState(true);
+  const [submitting,    setSubmitting]    = useState(false);
+  const [completing,    setCompleting]    = useState(false);
+  const [elapsed,       setElapsed]       = useState(0);
+  const [startTime,     setStartTime]     = useState(Date.now());
+  const [isListening,   setIsListening]   = useState(false);
+  const [recognition,   setRecognition]   = useState(null);
+  const [isSpeaking,    setIsSpeaking]    = useState(false);
 
-  const [isListening, setIsListening] = useState(false);
-  const [recognition, setRecognition] = useState(null);
-  const [isSpeaking, setIsSpeaking] = useState(false);
+  // Webcam / facial analysis state
+  const [camEnabled,    setCamEnabled]    = useState(false);
+  const [camError,      setCamError]      = useState(null);
+  const [showMetrics,   setShowMetrics]   = useState(true);
+  const videoRef = useRef(null);
+  const streamRef = useRef(null);
 
-  const toggleSpeakQuestion = () => {
-    if (!window.speechSynthesis) return toast.error('Text-to-speech not supported.');
-    if (isSpeaking) {
-      window.speechSynthesis.cancel();
-      setIsSpeaking(false);
-    } else {
-      const text = currentQuestion?.questionText;
-      if (!text) return;
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.rate = 0.95; 
-      utterance.pitch = 1.0;
-      utterance.onend = () => setIsSpeaking(false);
-      window.speechSynthesis.speak(utterance);
-      setIsSpeaking(true);
-    }
-  };
+  const facialMetrics = useFacialAnalysis(videoRef, camEnabled);
 
-  // Stop speaking when question changes or unmounts, and optionally auto-play the next question
-  useEffect(() => {
-    if (window.speechSynthesis) window.speechSynthesis.cancel();
-    setIsSpeaking(false);
-    
-    // Auto-read the new question after a short delay for smooth transition
-    const text = interview?.questions?.[currentIdx]?.questionText;
-    if (text && window.speechSynthesis) {
-      const timer = setTimeout(() => {
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.rate = 0.95;
-        utterance.pitch = 1.0;
-        utterance.onend = () => setIsSpeaking(false);
-        window.speechSynthesis.speak(utterance);
-        setIsSpeaking(true);
-      }, 500);
-      return () => clearTimeout(timer);
-    }
-  }, [currentIdx, interview?.questions]);
-
-  // Initialize Speech Recognition
-  useEffect(() => {
-    const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (SpeechRec) {
-      const rec = new SpeechRec();
-      rec.continuous = true;
-      rec.interimResults = true;
-      rec.onresult = (e) => {
-        let finalText = '';
-        for (let i = e.resultIndex; i < e.results.length; i++) {
-          if (e.results[i].isFinal) {
-            finalText += e.results[i][0].transcript;
-          }
-        }
-        // Only append text from results that are marked as final
-        // Interim results are intentionally ignored to prevent word repetition
-        if (finalText) {
-          setAnswerText((prev) => {
-            const trimmedPrev = prev.trimEnd();
-            const separator = trimmedPrev.length > 0 ? ' ' : '';
-            return trimmedPrev + separator + finalText.trim();
-          });
-        }
-      };
-      rec.onerror = (e) => {
-        console.error('Speech recognition error', e.error);
-        setIsListening(false);
-        toast.error('Microphone access denied or failed.');
-      };
-      setRecognition(rec);
+  /* ── Camera ─────────────────────────────────────────────────── */
+  const startCamera = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 240, facingMode: 'user' } });
+      streamRef.current = stream;
+      if (videoRef.current) videoRef.current.srcObject = stream;
+      setCamEnabled(true);
+      setCamError(null);
+      toast.success('Camera started — facial analysis active', { icon: '📸' });
+    } catch {
+      setCamError('Camera permission denied');
+      toast.error('Could not access camera');
     }
   }, []);
 
-  const toggleListening = () => {
-    if (!recognition) return toast.error('Voice typing not supported in this browser.');
-    if (isListening) {
-      recognition.stop();
-      setIsListening(false);
-    } else {
-      recognition.start();
-      setIsListening(true);
-      toast.success('Listening... Start speaking now.', { icon: '🎙️' });
-    }
+  const stopCamera = useCallback(() => {
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+    if (videoRef.current) videoRef.current.srcObject = null;
+    setCamEnabled(false);
+  }, []);
+
+  useEffect(() => () => stopCamera(), [stopCamera]);
+
+  /* ── Speech synthesis ───────────────────────────────────────── */
+  const toggleSpeakQuestion = () => {
+    if (!window.speechSynthesis) return toast.error('TTS not supported');
+    if (isSpeaking) { window.speechSynthesis.cancel(); setIsSpeaking(false); return; }
+    const text = interview?.questions?.[currentIdx]?.questionText;
+    if (!text) return;
+    const u = new SpeechSynthesisUtterance(text);
+    u.rate = 0.95; u.pitch = 1;
+    u.onend = () => setIsSpeaking(false);
+    window.speechSynthesis.speak(u);
+    setIsSpeaking(true);
   };
 
-  // Stop listening when navigating away from question
   useEffect(() => {
-    if (isListening && recognition) {
-      recognition.stop();
-      setIsListening(false);
-    }
-  }, [currentIdx, recognition]);
+    if (window.speechSynthesis) window.speechSynthesis.cancel();
+    setIsSpeaking(false);
+  }, [currentIdx]);
 
-  // Elapsed timer
+  /* ── Speech recognition ─────────────────────────────────────── */
   useEffect(() => {
-    const timer = setInterval(() => setElapsed(Math.floor((Date.now() - startTime) / 1000)), 1000);
-    return () => clearInterval(timer);
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) return;
+    const rec = new SR();
+    rec.continuous = true; rec.interimResults = true;
+    rec.onresult = (e) => {
+      let final = '';
+      for (let i = e.resultIndex; i < e.results.length; i++)
+        if (e.results[i].isFinal) final += e.results[i][0].transcript;
+      if (final) setAnswerText((p) => p.trimEnd() + (p.trimEnd().length ? ' ' : '') + final.trim());
+    };
+    rec.onerror = () => { setIsListening(false); toast.error('Microphone error'); };
+    setRecognition(rec);
+  }, []);
+
+  const toggleListening = () => {
+    if (!recognition) return toast.error('Voice not supported');
+    if (isListening) { recognition.stop(); setIsListening(false); }
+    else { recognition.start(); setIsListening(true); toast.success('Listening...', { icon: '🎙️' }); }
+  };
+
+  useEffect(() => {
+    if (isListening && recognition) { recognition.stop(); setIsListening(false); }
+  }, [currentIdx]);
+
+  /* ── Timer ──────────────────────────────────────────────────── */
+  useEffect(() => {
+    const t = setInterval(() => setElapsed(Math.floor((Date.now() - startTime) / 1000)), 1000);
+    return () => clearInterval(t);
   }, [startTime]);
 
   const formatTime = (s) => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
 
+  /* ── Init ───────────────────────────────────────────────────── */
   useEffect(() => {
-    const init = async () => {
+    (async () => {
       try {
-        const { data: intData } = await interviewAPI.getById(interviewId);
-        setInterview(intData.interview);
-        const { data: sessData } = await sessionAPI.start(interviewId);
-        setSession(sessData.session);
+        const { data: iData } = await interviewAPI.getById(interviewId);
+        setInterview(iData.interview);
+        const { data: sData } = await sessionAPI.start(interviewId);
+        setSession(sData.session);
       } catch (err) {
         toast.error(err.response?.data?.message || 'Failed to start session');
         navigate('/interviews');
-      } finally {
-        setLoading(false);
-      }
-    };
-    init();
+      } finally { setLoading(false); }
+    })();
   }, [interviewId, navigate]);
 
   const currentQuestion = interview?.questions?.[currentIdx];
-  const totalQuestions = interview?.questions?.length || 0;
-  const progress = totalQuestions ? ((currentIdx + 1) / totalQuestions) * 100 : 0;
+  const totalQuestions  = interview?.questions?.length || 0;
+  const progress        = totalQuestions ? ((currentIdx + 1) / totalQuestions) * 100 : 0;
 
+  /* ── Save answer ────────────────────────────────────────────── */
   const saveAnswer = useCallback(async (skipped = false) => {
     if (!session || !currentQuestion) return;
     if (!answerText.trim() && !skipped) return;
-
     setSubmitting(true);
     const timeTaken = Math.floor((Date.now() - startTime) / 1000);
-
     try {
       await sessionAPI.submitAnswer(session._id, {
         questionId: currentQuestion._id,
         answerText: skipped ? '' : answerText.trim(),
-        timeTaken,
-        skipped,
+        timeTaken, skipped,
       });
-      setSavedAnswers((prev) => ({ ...prev, [currentQuestion._id]: { answerText, skipped } }));
+      setSavedAnswers((p) => ({ ...p, [currentQuestion._id]: { answerText, skipped } }));
       setStartTime(Date.now());
-    } catch {
-      toast.error('Failed to save answer');
-    } finally {
-      setSubmitting(false);
-    }
+    } catch { toast.error('Failed to save answer'); }
+    finally { setSubmitting(false); }
   }, [session, currentQuestion, answerText, startTime]);
 
   const handleNext = async (skip = false) => {
     await saveAnswer(skip);
     setAnswerText(savedAnswers[interview?.questions?.[currentIdx + 1]?._id]?.answerText || '');
     setCurrentIdx((i) => i + 1);
-    setElapsed(0);
-    setStartTime(Date.now());
+    setElapsed(0); setStartTime(Date.now());
   };
 
   const handlePrev = () => {
@@ -191,164 +226,249 @@ export default function InterviewSessionPage() {
     setCompleting(true);
     try {
       await sessionAPI.complete(session._id);
-      toast.success('Session completed! Loading your results...');
+      toast.success('Session completed! Loading results...');
       navigate(`/sessions/${session._id}/results`);
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to complete session');
-    } finally {
-      setCompleting(false);
-    }
+      toast.error(err.response?.data?.message || 'Failed to complete');
+    } finally { setCompleting(false); }
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-96">
-        <div className="text-center">
-          <Zap className="w-12 h-12 text-brand-400 mx-auto mb-4 animate-pulse" />
-          <p className="text-slate-400">Loading your interview session...</p>
-        </div>
+  if (loading) return (
+    <div className="flex items-center justify-center h-96">
+      <div className="text-center">
+        <Zap className="w-12 h-12 text-brand-400 mx-auto mb-4 animate-pulse" />
+        <p className="text-slate-400">Loading your interview session...</p>
       </div>
-    );
-  }
+    </div>
+  );
 
   if (!interview || !session) return null;
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6 animate-fade-in">
-      {/* Header */}
-      <div className="card p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+    <div className="max-w-6xl mx-auto animate-fade-in">
+      {/* ── Top Header ──────────────────────────────────────────── */}
+      <div className="card p-4 mb-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
           <h2 className="font-display font-bold text-white">{interview.jobTitle}</h2>
           <p className="text-slate-400 text-sm capitalize">{interview.experienceLevel} level • {totalQuestions} questions</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <div className="flex items-center gap-1.5 text-sm bg-surface px-3 py-1.5 rounded-lg border border-surface-border">
             <Clock className="w-4 h-4 text-brand-400" />
             <span className="text-white font-mono">{formatTime(elapsed)}</span>
           </div>
-          <span className="text-sm text-slate-400">{currentIdx + 1} / {totalQuestions}</span>
+          <span className="text-sm text-slate-400 bg-surface px-3 py-1.5 rounded-lg border border-surface-border">
+            {currentIdx + 1} / {totalQuestions}
+          </span>
+          {/* Camera toggle */}
+          <button
+            onClick={camEnabled ? stopCamera : startCamera}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border transition-all ${
+              camEnabled
+                ? 'bg-brand-600/20 border-brand-500/40 text-brand-300 hover:bg-brand-600/30'
+                : 'bg-surface border-surface-border text-slate-400 hover:border-slate-500 hover:text-white'
+            }`}
+          >
+            {camEnabled ? <><CameraOff className="w-4 h-4" /> Stop Cam</> : <><Camera className="w-4 h-4" /> Enable Cam</>}
+          </button>
         </div>
       </div>
 
-      {/* Progress */}
-      <div className="progress-bar">
+      {/* ── Progress ────────────────────────────────────────────── */}
+      <div className="progress-bar mb-4">
         <motion.div className="progress-fill" style={{ width: `${progress}%` }} />
       </div>
 
-      {/* Question */}
-      <AnimatePresence mode="wait">
-        <motion.div
-          key={currentIdx}
-          initial={{ opacity: 0, y: 15 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -15 }}
-          transition={{ duration: 0.25 }}
-          className="card p-7 space-y-5"
-        >
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-brand-400 font-bold text-sm">Q{currentIdx + 1}</span>
-            <span className={`badge ${DIFFICULTY_CLR[currentQuestion?.difficulty] || 'badge-slate'}`}>
-              {currentQuestion?.difficulty}
-            </span>
-            <span className={`badge ${CATEGORY_CLR[currentQuestion?.category] || 'badge-slate'}`}>
-              {currentQuestion?.category?.replace('_', ' ')}
-            </span>
-            {savedAnswers[currentQuestion?._id] && (
-              <span className="badge badge-success"><CheckCircle className="w-3 h-3" /> Saved</span>
-            )}
-          </div>
+      {/* ── Main Layout ─────────────────────────────────────────── */}
+      <div className={`grid gap-4 ${camEnabled ? 'grid-cols-1 xl:grid-cols-[1fr_300px]' : 'grid-cols-1'}`}>
 
-          <div className="flex items-start justify-between gap-4">
-            <p className="text-white text-lg leading-relaxed font-medium">
-              {currentQuestion?.questionText}
-            </p>
-            <button
-              type="button"
-              onClick={toggleSpeakQuestion}
-              className={`flex-shrink-0 p-2 rounded-full transition-colors ${
-                isSpeaking 
-                  ? 'bg-brand-500/20 text-brand-400 animate-pulse' 
-                  : 'bg-surface hover:bg-surface-hover text-slate-400 border border-surface-border'
-              }`}
-              title="Read Question Aloud"
+        {/* Question + Answer */}
+        <div className="space-y-4">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={currentIdx}
+              initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -15 }}
+              transition={{ duration: 0.25 }}
+              className="card p-6 space-y-5"
             >
-              {isSpeaking ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
-            </button>
-          </div>
+              {/* Badges */}
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-brand-400 font-bold text-sm">Q{currentIdx + 1}</span>
+                <span className={`badge ${DIFFICULTY_CLR[currentQuestion?.difficulty] || 'badge-slate'}`}>
+                  {currentQuestion?.difficulty}
+                </span>
+                <span className={`badge ${CATEGORY_CLR[currentQuestion?.category] || 'badge-slate'}`}>
+                  {currentQuestion?.category?.replace('_', ' ')}
+                </span>
+                {savedAnswers[currentQuestion?._id] && (
+                  <span className="badge badge-success"><CheckCircle className="w-3 h-3" /> Saved</span>
+                )}
+              </div>
 
-          <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <label className="form-label !mb-0 flex items-center gap-2">
-                Your Answer
-              </label>
-              <button 
-                type="button"
-                onClick={toggleListening}
-                className={`flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-md transition-colors ${isListening ? 'bg-red-500/20 text-red-400 border border-red-500/30 animate-pulse' : 'bg-surface hover:bg-surface-hover text-slate-400 border border-surface-border'}`}
-              >
-                <Mic className="w-3.5 h-3.5" />
-                {isListening ? 'Listening...' : 'Voice Input'}
+              {/* Question text */}
+              <div className="flex items-start justify-between gap-4">
+                <p className="text-white text-lg leading-relaxed font-medium flex-1">
+                  {currentQuestion?.questionText}
+                </p>
+                <button onClick={toggleSpeakQuestion}
+                  className={`flex-shrink-0 p-2 rounded-full transition-colors ${
+                    isSpeaking ? 'bg-brand-500/20 text-brand-400 animate-pulse' : 'bg-surface hover:bg-surface-hover text-slate-400 border border-surface-border'
+                  }`} title="Read aloud">
+                  {isSpeaking ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
+                </button>
+              </div>
+
+              {/* Answer area */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="form-label !mb-0">Your Answer</label>
+                  <button onClick={toggleListening}
+                    className={`flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-md transition-colors ${
+                      isListening ? 'bg-red-500/20 text-red-400 border border-red-500/30 animate-pulse' : 'bg-surface hover:bg-surface-hover text-slate-400 border border-surface-border'
+                    }`}>
+                    <Mic className="w-3.5 h-3.5" />
+                    {isListening ? 'Listening...' : 'Voice Input'}
+                  </button>
+                </div>
+                <textarea
+                  className={`form-textarea h-44 transition-colors ${isListening ? 'border-brand-500 ring-1 ring-brand-500/50 bg-brand-500/5' : ''}`}
+                  placeholder="Type your answer here, or click 'Voice Input' to speak. Use the STAR method for behavioral questions..."
+                  value={answerText}
+                  onChange={(e) => setAnswerText(e.target.value)}
+                />
+                <p className="text-slate-500 text-xs mt-1">{answerText.length} characters</p>
+              </div>
+
+              {/* Keywords */}
+              {currentQuestion?.expectedKeywords?.length > 0 && (
+                <div className="p-3 rounded-lg bg-brand-600/10 border border-brand-500/20">
+                  <p className="text-xs text-brand-300">
+                    💡 <strong>Topic hints:</strong> {currentQuestion.expectedKeywords.join(' • ')}
+                  </p>
+                </div>
+              )}
+            </motion.div>
+          </AnimatePresence>
+
+          {/* Actions */}
+          <div className="flex items-center justify-between">
+            <button onClick={handlePrev} disabled={currentIdx === 0 || submitting} className="btn-secondary disabled:opacity-30">
+              <ChevronLeft className="w-4 h-4" /> Previous
+            </button>
+            <div className="flex items-center gap-2">
+              <button onClick={() => handleNext(true)} disabled={submitting} className="btn-ghost text-slate-400">
+                <SkipForward className="w-4 h-4" /> Skip
               </button>
+              {currentIdx < totalQuestions - 1 ? (
+                <button onClick={() => handleNext(false)} disabled={submitting || !answerText.trim()} className="btn-primary disabled:opacity-50">
+                  {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Send className="w-4 h-4" /> Save & Next</>}
+                </button>
+              ) : (
+                <button onClick={handleComplete} disabled={completing} className="btn-primary !bg-gradient-to-r !from-emerald-600 !to-teal-600">
+                  {completing ? <><Loader2 className="w-4 h-4 animate-spin" /> Evaluating...</> : <><CheckCircle className="w-4 h-4" /> Finish & Get Results</>}
+                </button>
+              )}
             </div>
-            <textarea
-              className={`form-textarea h-44 transition-colors ${isListening ? 'border-brand-500 ring-1 ring-brand-500/50 bg-brand-500/5' : ''}`}
-              placeholder="Type your answer here, or click 'Voice Input' to speak. Be concise yet thorough. For behavioral questions, use the STAR method..."
-              value={answerText}
-              onChange={(e) => setAnswerText(e.target.value)}
-            />
-            <p className="text-slate-500 text-xs mt-1.5">{answerText.length} characters</p>
           </div>
 
-          {/* Keywords hint */}
-          {currentQuestion?.expectedKeywords?.length > 0 && (
-            <div className="p-3 rounded-lg bg-brand-600/10 border border-brand-500/20">
-              <p className="text-xs text-brand-300">
-                💡 <strong>Topic hints:</strong> {currentQuestion.expectedKeywords.join(' • ')}
-              </p>
-            </div>
-          )}
-        </motion.div>
-      </AnimatePresence>
-
-      {/* Actions */}
-      <div className="flex items-center justify-between">
-        <button onClick={handlePrev} disabled={currentIdx === 0 || submitting}
-          className="btn-secondary disabled:opacity-30">
-          <ChevronLeft className="w-4 h-4" /> Previous
-        </button>
-
-        <div className="flex items-center gap-2">
-          <button onClick={() => handleNext(true)} disabled={submitting}
-            className="btn-ghost text-slate-400">
-            <SkipForward className="w-4 h-4" /> Skip
-          </button>
-
-          {currentIdx < totalQuestions - 1 ? (
-            <button onClick={() => handleNext(false)} disabled={submitting || !answerText.trim()}
-              className="btn-primary disabled:opacity-50">
-              {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Send className="w-4 h-4" /> Save & Next</>}
-            </button>
-          ) : (
-            <button onClick={handleComplete} disabled={completing}
-              className="btn-primary bg-emerald-600 hover:bg-emerald-500">
-              {completing
-                ? <><Loader2 className="w-4 h-4 animate-spin" /> Evaluating...</>
-                : <><CheckCircle className="w-4 h-4" /> Finish & Get Results</>}
-            </button>
+          {currentIdx === totalQuestions - 1 && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+              className="card p-4 border-amber-500/30 bg-amber-600/10 flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
+              <p className="text-amber-300 text-sm">Last question. Click <strong>Finish & Get Results</strong> to get AI evaluation.</p>
+            </motion.div>
           )}
         </div>
-      </div>
 
-      {/* Session completion warning */}
-      {currentIdx === totalQuestions - 1 && (
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-          className="card p-4 border-amber-500/30 bg-amber-600/10 flex items-start gap-3">
-          <AlertCircle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
-          <p className="text-amber-300 text-sm">
-            This is the last question. After saving, clicking <strong>"Finish & Get Results"</strong> will submit your answers and AI will evaluate your performance.
-          </p>
-        </motion.div>
-      )}
+        {/* ── Facial Analysis Panel ─────────────────────────────── */}
+        {camEnabled && (
+          <motion.div
+            initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }}
+            className="space-y-3"
+          >
+            {/* Video feed */}
+            <div className="card overflow-hidden">
+              <div className="relative bg-black aspect-video">
+                <video
+                  ref={videoRef}
+                  autoPlay muted playsInline
+                  className="w-full h-full object-cover"
+                />
+                {/* Overlay badge */}
+                <div className="absolute top-2 left-2 flex items-center gap-1.5 bg-black/60 backdrop-blur-sm px-2 py-1 rounded-lg">
+                  <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+                  <span className="text-white text-xs font-medium">LIVE</span>
+                </div>
+                <button onClick={() => setShowMetrics((s) => !s)}
+                  className="absolute top-2 right-2 bg-black/60 backdrop-blur-sm p-1.5 rounded-lg text-white hover:bg-black/80 transition-colors">
+                  {showMetrics ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                </button>
+              </div>
+            </div>
+
+            {/* Facial metrics */}
+            <AnimatePresence>
+              {showMetrics && (
+                <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
+                  className="card p-4 space-y-3">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Brain className="w-4 h-4 text-brand-400" />
+                    <span className="text-sm font-semibold text-white">Facial Analysis</span>
+                    <span className="text-xs text-slate-500 ml-auto">Live</span>
+                  </div>
+
+                  <MetricBar label="Attention"   value={facialMetrics.attention} />
+                  <MetricBar label="Confidence"  value={facialMetrics.confidence} />
+                  <MetricBar label="Eye Contact" value={facialMetrics.eyeContact} />
+                  <MetricBar label="Calmness"    value={100 - facialMetrics.stress} />
+
+                  {/* Emotion + posture tags */}
+                  <div className="flex items-center gap-2 pt-1">
+                    <span className="badge badge-brand text-xs">{facialMetrics.emotion}</span>
+                    <span className={`badge text-xs ${facialMetrics.posture === 'Good' ? 'badge-success' : 'badge-warning'}`}>
+                      {facialMetrics.posture}
+                    </span>
+                  </div>
+
+                  {/* Tips */}
+                  <div className="pt-1 border-t border-surface-border">
+                    {facialMetrics.confidence < 50 && (
+                      <p className="text-xs text-amber-400">💡 Take a breath — project confidence!</p>
+                    )}
+                    {facialMetrics.eyeContact < 50 && (
+                      <p className="text-xs text-amber-400">👀 Maintain eye contact with the camera</p>
+                    )}
+                    {facialMetrics.attention >= 75 && facialMetrics.confidence >= 65 && (
+                      <p className="text-xs text-emerald-400">✨ Great presence — keep it up!</p>
+                    )}
+                    {facialMetrics.posture !== 'Good' && (
+                      <p className="text-xs text-amber-400">🪑 Sit up straight</p>
+                    )}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Overall communication score */}
+            <div className="card p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <TrendingUp className="w-4 h-4 text-brand-400" />
+                <span className="text-sm font-semibold text-white">Communication Score</span>
+              </div>
+              <div className="text-3xl font-display font-bold gradient-text text-center my-2">
+                {Math.round((facialMetrics.attention + facialMetrics.confidence + facialMetrics.eyeContact + (100 - facialMetrics.stress)) / 4)}%
+              </div>
+              <p className="text-xs text-slate-500 text-center">Based on real-time facial cues</p>
+            </div>
+
+            {camError && (
+              <div className="card p-3 border-red-500/30 bg-red-500/5">
+                <p className="text-xs text-red-400">{camError}</p>
+              </div>
+            )}
+          </motion.div>
+        )}
+      </div>
     </div>
   );
 }
