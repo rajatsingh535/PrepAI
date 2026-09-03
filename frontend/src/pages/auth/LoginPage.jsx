@@ -1,4 +1,4 @@
-import { useForm } from 'react-hook-form';
+﻿import { useForm } from 'react-hook-form';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Mail, Lock, Eye, EyeOff, Loader2 } from 'lucide-react';
@@ -47,7 +47,15 @@ export default function LoginPage() {
         </div>
 
         <div>
-          <label className="form-label">Password</label>
+          <div className="flex items-center justify-between mb-2">
+            <label className="form-label mb-0">Password</label>
+            <Link 
+              to="/forgot-password" 
+              className="text-xs text-brand-400 hover:text-brand-300 transition-colors"
+            >
+              Forgot password?
+            </Link>
+          </div>
           <div className="relative">
             <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
             <input

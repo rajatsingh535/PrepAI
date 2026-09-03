@@ -1,14 +1,14 @@
-/**
- * App.jsx — Route definitions only
+﻿/**
+ * App.jsx â€” Route definitions only
  *
- * No UI, no components — just routing structure.
+ * No UI, no components â€” just routing structure.
  * Auth state comes from Zustand (authStore) via useAuth().
  *
  * Route categories:
- *  - Public      → accessible to everyone
- *  - GuestOnly   → redirect to /dashboard if already logged in
- *  - Protected   → redirect to /login if not authenticated
- *  - AdminOnly   → redirect to /dashboard if not admin
+ *  - Public      â†’ accessible to everyone
+ *  - GuestOnly   â†’ redirect to /dashboard if already logged in
+ *  - Protected   â†’ redirect to /login if not authenticated
+ *  - AdminOnly   â†’ redirect to /dashboard if not admin
  */
 
 import { lazy, Suspense } from 'react';
@@ -19,15 +19,16 @@ import { useAdminAuth } from '@/context';
 import ErrorBoundary from '@/components/admin/ErrorBoundary';
 import SuspenseLoader from '@/components/admin/SuspenseLoader';
 
-// ─── Layouts ─────────────────────────────────────────────────────
+// â”€â”€â”€ Layouts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 import AuthLayout      from '@/layouts/AuthLayout';
 import DashboardLayout from '@/layouts/DashboardLayout';
 import AdminLayout     from '@/layouts/AdminLayout';
 
-// ─── Pages ───────────────────────────────────────────────────────
+// â”€â”€â”€ Pages â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 import LandingPage          from '@/pages/LandingPage';
 import LoginPage            from '@/pages/auth/LoginPage';
 import RegisterPage         from '@/pages/auth/RegisterPage';
+import ForgotPasswordPage    from '@/pages/auth/ForgotPasswordPage';
 import DashboardPage        from '@/pages/dashboard/DashboardPage';
 import NewInterviewPage     from '@/pages/interview/NewInterviewPage';
 import InterviewListPage    from '@/pages/interview/InterviewListPage';
@@ -39,7 +40,7 @@ import ResumesPage          from '@/pages/resume/ResumesPage';
 import ProfilePage          from '@/pages/profile/ProfilePage';
 import Jobs                 from '@/pages/Jobs';
 
-// ─── Admin Pages ──────────────────────────────────────────────────
+// â”€â”€â”€ Admin Pages â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const AdminLoginPage       = lazy(() => import('@/pages/admin/AdminLoginPage'));
 const AdminDashboardPage   = lazy(() => import('@/pages/admin/AdminDashboardPage'));
 const AdminUsersPage       = lazy(() => import('@/pages/admin/AdminUsersPage'));
@@ -57,10 +58,10 @@ const AdminPromptsPage     = lazy(() => import('@/pages/admin/AdminPromptsPage')
 const AdminLogsPage        = lazy(() => import('@/pages/admin/AdminLogsPage'));
 import RecommendedJobs     from '@/pages/RecommendedJobs';
 
-// ─── Route Guards ─────────────────────────────────────────────────
+// â”€â”€â”€ Route Guards â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
- * ProtectedRoute — Requires authentication.
+ * ProtectedRoute â€” Requires authentication.
  * Redirects to /login if user is not authenticated.
  */
 const ProtectedRoute = ({ children }) => {
@@ -69,7 +70,7 @@ const ProtectedRoute = ({ children }) => {
 };
 
 /**
- * GuestRoute — Only for non-authenticated users.
+ * GuestRoute â€” Only for non-authenticated users.
  * Redirects to /dashboard if already logged in as a user.
  */
 const GuestRoute = ({ children }) => {
@@ -79,7 +80,7 @@ const GuestRoute = ({ children }) => {
 };
 
 /**
- * AdminRoute — Only for authenticated admins (via AdminAuthContext).
+ * AdminRoute â€” Only for authenticated admins (via AdminAuthContext).
  * Redirects to /admin/login if not authenticated.
  * Redirects to /dashboard if authenticated but not admin.
  */
@@ -100,7 +101,7 @@ const AdminPermissionRoute = ({ permission, children }) => {
 };
 
 /**
- * AdminGuestRoute — /admin/login page.
+ * AdminGuestRoute â€” /admin/login page.
  * If already authenticated as admin, redirect to /admin.
  */
 const AdminGuestRoute = ({ children }) => {
@@ -110,14 +111,14 @@ const AdminGuestRoute = ({ children }) => {
   return children;
 };
 
-// ─── App ──────────────────────────────────────────────────────────
+// â”€â”€â”€ App â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export default function App() {
   return (
     <Routes>
-      {/* ── Public ──────────────────────────────── */}
+      {/* â”€â”€ Public â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <Route path="/" element={<LandingPage />} />
 
-      {/* ── Guest-only (auth) ────────────────────── */}
+      {/* â”€â”€ Guest-only (auth) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <Route element={<AuthLayout />}>
         <Route
           path="/login"
@@ -127,9 +128,13 @@ export default function App() {
           path="/register"
           element={<GuestRoute><RegisterPage /></GuestRoute>}
         />
+        <Route
+          path="/forgot-password"
+          element={<GuestRoute><ForgotPasswordPage /></GuestRoute>}
+        />
       </Route>
 
-      {/* ── Admin Login (guest-only for admins) ──── */}
+      {/* â”€â”€ Admin Login (guest-only for admins) â”€â”€â”€â”€ */}
       <Route
         path="/admin/login"
         element={
@@ -143,7 +148,7 @@ export default function App() {
         }
       />
 
-      {/* ── Admin protected routes ────────────────── */}
+      {/* â”€â”€ Admin protected routes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <Route
         element={
           <AdminRoute>
@@ -171,7 +176,7 @@ export default function App() {
         <Route path="/admin/logs"         element={<AdminPermissionRoute permission="view:logs"><AdminLogsPage /></AdminPermissionRoute>} />
       </Route>
 
-      {/* ── Protected (dashboard) ────────────────── */}
+      {/* â”€â”€ Protected (dashboard) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <Route
         element={
           <ProtectedRoute>
@@ -192,9 +197,11 @@ export default function App() {
         <Route path="/profile"                      element={<ProfilePage />} />
       </Route>
 
-      {/* ── 404 fallback ─────────────────────────── */}
+      {/* â”€â”€ 404 fallback â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }
+
+
 
