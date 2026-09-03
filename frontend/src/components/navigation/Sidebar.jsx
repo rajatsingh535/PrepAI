@@ -3,29 +3,21 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { clsx } from 'clsx';
 import {
-  Zap, LayoutDashboard, MessageSquarePlus, ClipboardList,
-  FileText, History, User, LogOut, X, Briefcase,
-  ChevronLeft, ChevronRight, Sparkles
+  Zap, LayoutDashboard, MessageSquarePlus, History,
+  User, LogOut, X, Sparkles,
+  ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import toast from 'react-hot-toast';
 
+// Navigation structure: Dashboard, New Interview, History, Matched Jobs (conditional), Profile
 const NAV_SECTIONS = [
   {
     label: 'Practice',
     items: [
-      { to: '/dashboard',      icon: LayoutDashboard,  label: 'Dashboard' },
+      { to: '/dashboard',      icon: LayoutDashboard,   label: 'Dashboard' },
       { to: '/interviews/new', icon: MessageSquarePlus, label: 'New Interview', accent: true },
-      { to: '/interviews',     icon: ClipboardList,     label: 'Interviews' },
-      { to: '/sessions',       icon: History,           label: 'History' },
-    ],
-  },
-  {
-    label: 'Resources',
-    items: [
-      { to: '/resumes',           icon: FileText,    label: 'Resumes' },
-      { to: '/jobs',              icon: Briefcase,   label: 'Jobs' },
-      { to: '/jobs/recommended',  icon: Sparkles,    label: 'Matched Jobs' },
+      { to: '/history',        icon: History,           label: 'History' },
     ],
   },
   {
@@ -49,7 +41,7 @@ export default function Sidebar({ isOpen, onClose }) {
 
   return (
     <>
-      {/* Desktop */}
+      {/* Desktop sidebar */}
       <aside className={clsx(
         'hidden lg:flex flex-col border-r border-white/[0.06] bg-slate-900/60 backdrop-blur-xl transition-all duration-300 flex-shrink-0',
         collapsed ? 'w-16' : 'w-60'
@@ -85,6 +77,11 @@ export default function Sidebar({ isOpen, onClose }) {
 }
 
 function SidebarContent({ user, onLogout, collapsed, onToggleCollapse, onNavClick }) {
+  // Safe guest user defaults
+  const userName = user?.name || "Guest";
+  const userEmail = user?.email || "guest@prepai.com";
+  const userInitial = userName.charAt(0).toUpperCase();
+
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Logo */}
@@ -110,7 +107,7 @@ function SidebarContent({ user, onLogout, collapsed, onToggleCollapse, onNavClic
         )}
       </div>
 
-      {/* Nav */}
+      {/* Navigation sections */}
       <nav className="flex-1 overflow-y-auto py-4 px-2 space-y-5">
         {NAV_SECTIONS.map(({ label, items }) => (
           <div key={label}>
@@ -151,23 +148,54 @@ function SidebarContent({ user, onLogout, collapsed, onToggleCollapse, onNavClic
             </div>
           </div>
         ))}
+        
+        {/* Conditional Matched Jobs link (only if user has resume) */}
+        {user?.hasResume && (
+          <div>
+            {!collapsed && (
+              <p className="text-[10px] font-medium text-slate-600 uppercase tracking-widest px-3 mb-2">Jobs</p>
+            )}
+            <NavLink to="/jobs/matched" end onClick={onNavClick}
+              className={({ isActive }) => clsx(
+                'flex items-center gap-3 rounded-xl text-sm font-medium transition-all duration-150 overflow-hidden',
+                collapsed ? 'justify-center px-2 py-2.5' : 'px-3 py-2.5',
+                isActive
+                  ? 'bg-white/[0.08] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] ring-1 ring-white/[0.06]'
+                  : 'text-slate-500 hover:text-white hover:bg-white/[0.05]'
+              )}>
+              {({ isActive }) => (
+                <>
+                  <Sparkles className={clsx('w-4 h-4 flex-shrink-0 transition-colors', isActive ? 'text-brand-400' : '')} />
+                  <AnimatePresence>
+                    {!collapsed && (
+                      <motion.span initial={{ opacity: 0, width: 0 }} animate={{ opacity: 1, width: 'auto' }} exit={{ opacity: 0, width: 0 }}
+                        className="flex-1 overflow-hidden whitespace-nowrap">
+                        Matched Jobs
+                      </motion.span>
+                    )}
+                  </AnimatePresence>
+                </>
+              )}
+            </NavLink>
+          </div>
+        )}
       </nav>
 
-      {/* User profile drawer */}
+      {/* User profile at bottom */}
       <div className={clsx('flex-shrink-0 border-t border-white/[0.06] p-3', collapsed ? 'flex justify-center' : '')}>
         {collapsed ? (
           <div className="w-8 h-8 rounded-full bg-gradient-brand flex items-center justify-center text-white text-xs font-bold shadow-glow">
-            {(user?.name || "Guest").charAt(0).toUpperCase()}
+            {userInitial}
           </div>
         ) : (
           <div className="space-y-2">
             <div className="flex items-center gap-3 px-2 py-2 rounded-xl hover:bg-white/[0.04] transition-colors cursor-default">
               <div className="w-8 h-8 rounded-full bg-gradient-brand flex items-center justify-center text-white text-xs font-bold flex-shrink-0 shadow-glow">
-                {(user?.name || "Guest").charAt(0).toUpperCase()}
+                {userInitial}
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-white truncate">{user?.name}</p>
-                <p className="text-xs text-slate-500 truncate">{user?.email}</p>
+                <p className="text-sm font-medium text-white truncate">{userName}</p>
+                <p className="text-xs text-slate-500 truncate">{userEmail}</p>
               </div>
             </div>
             <button onClick={onLogout}
@@ -180,4 +208,3 @@ function SidebarContent({ user, onLogout, collapsed, onToggleCollapse, onNavClic
     </div>
   );
 }
-
