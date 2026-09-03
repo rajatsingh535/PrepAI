@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+﻿import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
@@ -67,11 +67,11 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6 animate-fade-in max-w-6xl mx-auto">
-      {/* ── Greeting ──────────────────────────────────────────── */}
+      {/* â”€â”€ Greeting â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <motion.div {...fadeUp(0)} className="flex items-center justify-between">
         <div>
           <h2 className="text-xl font-semibold text-white tracking-tight">
-            Good day, <span className="gradient-text">{user?.name?.split(' ')[0]}</span>
+            Good day, <span className="gradient-text">{user?.name?.split(" ")[0] || "Guest"}</span>
           </h2>
           <p className="text-sm text-slate-500 mt-0.5">Here's your practice overview</p>
         </div>
@@ -80,15 +80,15 @@ export default function DashboardPage() {
         </Link>
       </motion.div>
 
-      {/* ── Stat Cards ────────────────────────────────────────── */}
+      {/* â”€â”€ Stat Cards â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
-        <StatCard icon={ClipboardList} label="Total Sessions"   value={loading ? '—' : stats?.totalSessions  ?? 0}  sub="All time"     accent="bg-brand-500/10 text-brand-400"   delay={0.05} />
-        <StatCard icon={Trophy}        label="Completed"        value={loading ? '—' : stats?.completedSessions ?? 0} sub="Finished"   accent="bg-emerald-500/10 text-emerald-400" delay={0.1} />
-        <StatCard icon={TrendingUp}    label="Avg. Score"       value={loading ? '—' : `${stats?.averageScore ?? 0}%`} sub="Across sessions" accent="bg-violet-500/10 text-violet-400" delay={0.15} />
-        <StatCard icon={Star}          label="Best Score"       value={loading ? '—' : `${stats?.bestScore ?? 0}%`}   sub="Personal best"   accent="bg-amber-500/10 text-amber-400"   delay={0.2} />
+        <StatCard icon={ClipboardList} label="Total Sessions"   value={loading ? 'â€”' : stats?.totalSessions  ?? 0}  sub="All time"     accent="bg-brand-500/10 text-brand-400"   delay={0.05} />
+        <StatCard icon={Trophy}        label="Completed"        value={loading ? 'â€”' : stats?.completedSessions ?? 0} sub="Finished"   accent="bg-emerald-500/10 text-emerald-400" delay={0.1} />
+        <StatCard icon={TrendingUp}    label="Avg. Score"       value={loading ? 'â€”' : `${stats?.averageScore ?? 0}%`} sub="Across sessions" accent="bg-violet-500/10 text-violet-400" delay={0.15} />
+        <StatCard icon={Star}          label="Best Score"       value={loading ? 'â€”' : `${stats?.bestScore ?? 0}%`}   sub="Personal best"   accent="bg-amber-500/10 text-amber-400"   delay={0.2} />
       </div>
 
-      {/* ── Charts + Recent ───────────────────────────────────── */}
+      {/* â”€â”€ Charts + Recent â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
 
         {/* Score gauge */}
@@ -147,7 +147,7 @@ export default function DashboardPage() {
         </motion.div>
       </div>
 
-      {/* ── Recent Sessions ──────────────────────────────────── */}
+      {/* â”€â”€ Recent Sessions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <motion.div {...fadeUp(0.2)} className="card p-5">
         <div className="flex items-center justify-between mb-4">
           <p className="text-sm font-medium text-white">Recent Sessions</p>
@@ -198,7 +198,7 @@ export default function DashboardPage() {
         )}
       </motion.div>
 
-      {/* ── Quick Actions ─────────────────────────────────────── */}
+      {/* â”€â”€ Quick Actions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <motion.div {...fadeUp(0.25)}>
         <p className="text-xs text-slate-500 uppercase tracking-wider mb-3">Quick actions</p>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -224,3 +224,4 @@ export default function DashboardPage() {
     </div>
   );
 }
+

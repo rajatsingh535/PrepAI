@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { clsx } from 'clsx';
@@ -157,13 +157,13 @@ function SidebarContent({ user, onLogout, collapsed, onToggleCollapse, onNavClic
       <div className={clsx('flex-shrink-0 border-t border-white/[0.06] p-3', collapsed ? 'flex justify-center' : '')}>
         {collapsed ? (
           <div className="w-8 h-8 rounded-full bg-gradient-brand flex items-center justify-center text-white text-xs font-bold shadow-glow">
-            {user?.name?.charAt(0).toUpperCase()}
+            {(user?.name || "Guest").charAt(0).toUpperCase()}
           </div>
         ) : (
           <div className="space-y-2">
             <div className="flex items-center gap-3 px-2 py-2 rounded-xl hover:bg-white/[0.04] transition-colors cursor-default">
               <div className="w-8 h-8 rounded-full bg-gradient-brand flex items-center justify-center text-white text-xs font-bold flex-shrink-0 shadow-glow">
-                {user?.name?.charAt(0).toUpperCase()}
+                {(user?.name || "Guest").charAt(0).toUpperCase()}
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium text-white truncate">{user?.name}</p>
@@ -180,3 +180,4 @@ function SidebarContent({ user, onLogout, collapsed, onToggleCollapse, onNavClic
     </div>
   );
 }
+

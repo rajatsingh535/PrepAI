@@ -177,13 +177,7 @@ export default function App() {
       </Route>
 
       {/* â”€â”€ Protected (dashboard) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
-      <Route
-        element={
-          <ProtectedRoute>
-            <DashboardLayout />
-          </ProtectedRoute>
-        }
-      >
+      <Route element={<DashboardLayout />}
         <Route path="/dashboard"                    element={<DashboardPage />} />
         <Route path="/interviews"                   element={<InterviewListPage />} />
         <Route path="/interviews/new"               element={<NewInterviewPage />} />
@@ -202,6 +196,7 @@ export default function App() {
     </Routes>
   );
 }
+
 
 
 
