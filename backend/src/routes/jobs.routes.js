@@ -193,8 +193,7 @@ router.get(
   '/:id',
   [
     param('id')
-      .notEmpty().withMessage('Job id is required')
-      .isNumeric().withMessage('Job id must be numeric'),
+      .notEmpty().withMessage('Job id is required'),
     query('country')
       .optional()
       .isAlpha()

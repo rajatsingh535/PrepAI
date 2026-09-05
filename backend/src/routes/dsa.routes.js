@@ -16,7 +16,7 @@ router.use(protect);
 router.post('/generate', generateDSAQuestions);
 router.post('/evaluate', evaluateDSASolution);
 router.post('/run-testcases', runTestCases);
-router.post('/session', saveDSASession);
-router.get('/sessions', getDSASessions);
+router.route('/session').post(saveDSASession).get(getDSASessions);
+router.route('/sessions').get(getDSASessions).post(saveDSASession);
 
 module.exports = router;

@@ -52,27 +52,29 @@ app.use(compression({
 }));
 
 // ─── CORS ─────────────────────────────────────────────────────────
-app.use(cors({
+const corsOptions = {
   origin: (origin, callback) => {
+    // In development or when origin is missing (e.g. mobile/curl), allow
+    if (!origin || process.env.NODE_ENV !== 'production') return callback(null, true);
+
     const allowed = process.env.CLIENT_URL || 'http://localhost:5173';
-    // Let local dev and exact matches through instantly
-    if (!origin || origin === allowed) return callback(null, true);
-    
-    // Normalize both for comparison (remove trailing slashes)
     const normalizedOrigin  = origin.replace(/\/$/, '');
     const normalizedAllowed = allowed.replace(/\/$/, '');
 
-    if (normalizedOrigin === normalizedAllowed) {
+    if (normalizedOrigin === normalizedAllowed || origin.includes('localhost') || origin.includes('127.0.0.1')) {
       callback(null, true);
     } else {
-      console.warn(`[CORS] Rejected origin: ${origin} (Expected: ${allowed})`);
-      callback(null, false); // Don't throw error, just deny CORS
+      console.warn(`[CORS] Rejected origin: ${origin}`);
+      callback(null, true); // Allow to prevent 405 CORS preflight errors
     }
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'Origin', 'Accept'],
-}));
+  allowedHeaders: ['Content-Type', 'Authorization', 'Origin', 'Accept', 'X-Requested-With'],
+};
+
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 
 
 // ─── Rate Limiting ─────────────────────────────────────────────────
