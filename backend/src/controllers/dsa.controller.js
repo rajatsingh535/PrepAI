@@ -96,35 +96,65 @@ const NEETCODE_TOPIC_TEMPLATES = {
   ]
 };
 
+let kaggleQuestions = [];
+try {
+  kaggleQuestions = require('../data/dsa_questions.json');
+} catch (err) {
+  logger.warn('Kaggle DSA questions dataset JSON not found:', err.message);
+  kaggleQuestions = [];
+}
+
 /**
- * Generate topic-wise DSA questions using Hosted LeetCode API & Groq LLM
+ * Generate topic-wise DSA questions using Kaggle Dataset (inductiveanks/dsa-questions-dataset), Hosted LeetCode API & Groq LLM
  */
 const generateDSAQuestions = async (req, res, next) => {
   const { topic = 'arrays', difficulty = 'Medium', count = 1, language = 'python' } = req.body;
-  const numQuestions = Math.min(Math.max(1, parseInt(count, 10) || 1), 5);
+  const numQuestions = Math.min(Math.max(1, parseInt(count, 10) || 1), 10);
 
+  // 1. Match from Kaggle DSA Dataset
+  const topicKaggle = kaggleQuestions.filter(
+    (q) => q.topic === topic && (difficulty === 'Mixed' || q.difficulty.toLowerCase() === difficulty.toLowerCase())
+  );
+  const fallbackKaggle = kaggleQuestions.filter((q) => q.topic === topic);
+  const matchedKaggle = topicKaggle.length > 0 ? topicKaggle : fallbackKaggle;
+
+  // 2. Fetch from Hosted LeetCode API (leetcode-api-pied.vercel.app)
   const slugs = LEETCODE_SLUGS[topic] || LEETCODE_SLUGS.arrays;
   const fetchedProblems = [];
 
-  // Attempt fetching from Hosted LeetCode API (leetcode-api-pied.vercel.app)
-  for (let i = 0; i < numQuestions; i++) {
+  for (let i = 0; i < Math.min(numQuestions, slugs.length); i++) {
     const slug = slugs[i % slugs.length];
     const prob = await fetchLeetCodeProblem(slug, topic, difficulty);
     if (prob) fetchedProblems.push(prob);
   }
 
-  if (fetchedProblems.length > 0) {
+  // Combine fetched LeetCode API problems + Kaggle DSA Dataset problems
+  let combinedPool = [...fetchedProblems];
+  if (matchedKaggle.length > 0) {
+    const shuffledKaggle = [...matchedKaggle].sort(() => 0.5 - Math.random());
+    combinedPool = [...combinedPool, ...shuffledKaggle];
+  }
+
+  if (combinedPool.length > 0) {
+    // Unique problems by title
+    const uniqueMap = new Map();
+    combinedPool.forEach((p) => {
+      if (!uniqueMap.has(p.title)) uniqueMap.set(p.title, p);
+    });
+    const selectedProblems = Array.from(uniqueMap.values()).slice(0, numQuestions);
+
     return res.status(200).json({
       success: true,
+      source: 'Kaggle DSA Dataset & Hosted LeetCode API',
       topic,
       difficulty,
       language,
-      count: fetchedProblems.length,
-      problems: fetchedProblems
+      count: selectedProblems.length,
+      problems: selectedProblems
     });
   }
 
-  // Fallback to templates or Groq if LeetCode API is unreachable
+  // Fallback to Groq generator if dataset/API are empty
   try {
     const prompt = `You are a NeetCode 150 & LeetCode expert interviewer.
 Generate ${numQuestions} distinct, high-quality DSA coding interview questions for topic: "${topic}" at difficulty level: "${difficulty}".
