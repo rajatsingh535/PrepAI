@@ -36,8 +36,13 @@ exports.generateQuestions = async (req, res, next) => {
   const interview = await Interview.findOne({ _id: req.params.id, userId: req.user._id });
   if (!interview) return next(new AppError('Interview not found.', 404));
 
-  if (interview.generationStatus === 'generating') {
-    return next(new AppError('Questions are already being generated.', 400));
+  // If already generated, return existing questions directly
+  if (interview.generationStatus === 'generated' && interview.questions?.length > 0) {
+    return res.status(200).json({
+      success: true,
+      message: `${interview.questions.length} questions ready.`,
+      interview,
+    });
   }
 
   // Fetch resume text if linked

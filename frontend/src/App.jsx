@@ -1,4 +1,4 @@
-﻿import { lazy, Suspense } from 'react';
+import { lazy, Suspense } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from '@/hooks';
 import { useAdminAuth } from '@/context';
@@ -41,6 +41,7 @@ const AdminScraperPage     = lazy(() => import('@/pages/admin/AdminScraperPage')
 const AdminPromptsPage     = lazy(() => import('@/pages/admin/AdminPromptsPage'));
 const AdminLogsPage        = lazy(() => import('@/pages/admin/AdminLogsPage'));
 import RecommendedJobs     from '@/pages/RecommendedJobs';
+import PricingPage         from '@/pages/pricing/PricingPage';
 
 const GuestRoute = ({ children }) => {
   const { isAuthenticated } = useAuth();
@@ -123,7 +124,9 @@ export default function App() {
         <Route path="/dsa-session" element={<DSASessionPage />} />
         <Route path="/sessions/:id/results" element={<SessionResultPage />} />
         <Route path="/sessions" element={<SessionHistoryPage />} />
+        <Route path="/history" element={<SessionHistoryPage />} />
         <Route path="/resumes" element={<ResumesPage />} />
+        <Route path="/pricing" element={<PricingPage />} />
         <Route path="/jobs" element={<Jobs />} />
         <Route path="/jobs/recommended" element={<RecommendedJobs />} />
         <Route path="/profile" element={<ProfilePage />} />

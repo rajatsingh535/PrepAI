@@ -1,16 +1,16 @@
-﻿import { useState } from 'react';
+import { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { clsx } from 'clsx';
 import {
   Zap, LayoutDashboard, MessageSquarePlus, History,
-  User, LogOut, X, Sparkles,
+  User, LogOut, X, Sparkles, Crown,
   ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import toast from 'react-hot-toast';
 
-// Navigation structure: Dashboard, New Interview, History, Matched Jobs (conditional), Profile
+// Navigation structure: Dashboard, New Interview, History, Pricing, Profile
 const NAV_SECTIONS = [
   {
     label: 'Practice',
@@ -18,6 +18,7 @@ const NAV_SECTIONS = [
       { to: '/dashboard',      icon: LayoutDashboard,   label: 'Dashboard' },
       { to: '/interviews/new', icon: MessageSquarePlus, label: 'New Interview', accent: true },
       { to: '/history',        icon: History,           label: 'History' },
+      { to: '/pricing',        icon: Crown,             label: 'Plans & Pricing', badge: 'PRO' },
     ],
   },
   {

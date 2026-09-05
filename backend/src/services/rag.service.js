@@ -125,6 +125,14 @@ const extractContextViaRAG = async (resumeText, jobDescription) => {
       return `Fallback Context:\nJD: ${(jobDescription || '').slice(0, 1000)}\nResume: ${(resumeText || '').slice(0, 1000)}`;
     }
 
+    // If OpenAI key is missing, return clean formatted chunks directly
+    if (!process.env.OPENAI_API_KEY) {
+      return chunks
+        .slice(0, 8)
+        .map((chunk) => `[${(chunk.metadata?.type || 'context').toUpperCase()} › ${chunk.metadata?.section || 'general'}]\n${chunk.content}`)
+        .join('\n\n---\n\n');
+    }
+
     // Step 2: Embed & store
     const vectorStore = await createAndStoreEmbeddings(chunks);
 
@@ -133,8 +141,7 @@ const extractContextViaRAG = async (resumeText, jobDescription) => {
 
     return retrievedContext;
   } catch (error) {
-    console.error('RAG Pipeline Error:', error);
-    // Graceful fallback if OpenAI key is missing or embedding fails
+    // Fallback if vector embedding fails
     return `Fallback Context:\nJD: ${(jobDescription || '').slice(0, 1000)}\nResume: ${(resumeText || '').slice(0, 1000)}`;
   }
 };

@@ -149,29 +149,59 @@ exports.completeSession = async (req, res, next) => {
   res.status(200).json({ success: true, session });
 };
 
+const DSASession = require('../models/DSASession.model');
+
 // ─── GET /api/sessions ────────────────────────────────────────────
 exports.getMySessions = async (req, res) => {
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 10;
   const skip = (page - 1) * limit;
 
-  const [sessions, total] = await Promise.all([
+  const [aiSessions, dsaSessions, totalAi, totalDsa] = await Promise.all([
     Session.find({ userId: req.user._id })
       .sort('-createdAt')
       .skip(skip)
       .limit(limit)
       .populate({ path: 'interviewId', select: 'jobTitle company experienceLevel' })
-      .select('-answers'),
+      .select('-answers')
+      .lean(),
+    DSASession.find({ userId: req.user._id })
+      .sort('-createdAt')
+      .skip(skip)
+      .limit(limit)
+      .lean(),
     Session.countDocuments({ userId: req.user._id }),
+    DSASession.countDocuments({ userId: req.user._id }),
   ]);
+
+  // Format DSA sessions to match History card schema
+  const formattedDsa = dsaSessions.map(d => ({
+    _id: d._id,
+    interviewId: {
+      jobTitle: `DSA: ${d.topic.charAt(0).toUpperCase() + d.topic.slice(1)} (${d.difficulty})`,
+      company: 'Coding Practice',
+      experienceLevel: d.difficulty.toLowerCase()
+    },
+    status: d.status,
+    overallScore: d.overallScore ? Math.round(d.overallScore * 10) : 80,
+    totalTimeTaken: 300,
+    createdAt: d.createdAt,
+    isDSA: true
+  }));
+
+  const combined = [...aiSessions, ...formattedDsa]
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+    .slice(0, limit);
+
+  const total = totalAi + totalDsa;
 
   res.status(200).json({
     success: true,
-    count: sessions.length,
+    count: combined.length,
     total,
     page,
-    totalPages: Math.ceil(total / limit),
-    sessions,
+    totalPages: Math.ceil(total / limit) || 1,
+    sessions: combined,
   });
 };
 

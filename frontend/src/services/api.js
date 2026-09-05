@@ -55,3 +55,13 @@ export const jobsAPI = {
   getRecommended: () => api.get('/jobs/recommended'),
   generateQuestionsDirect: (data) => api.post('/jobs/generate-questions', data),
 };
+
+// ── DSA Interview ──────────────────────────────────────────────────
+export const dsaAPI = {
+  generateQuestions: (data) => api.post('/dsa/generate', data),
+  evaluateSolution: (data) => api.post('/dsa/evaluate', data),
+  runTestcases: (data) => api.post('/dsa/run-testcases', data),
+  saveSession: (data) => api.post('/dsa/session', data),
+  getSessions: () => api.get('/dsa/sessions'),
+};
+

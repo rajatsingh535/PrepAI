@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { 
   Sparkles, MapPin, Banknote, Building2, ExternalLink, 
-  Play, Loader2, FileText, ArrowRight, ShieldCheck 
+  Play, Loader2, FileText, ArrowRight, ShieldCheck, Upload, X, CheckCircle 
 } from 'lucide-react';
 import { jobsAPI, resumeAPI, interviewAPI } from '@/services/api';
 import toast from 'react-hot-toast';
@@ -16,10 +16,36 @@ export default function RecommendedJobs() {
   const [resumes, setResumes] = useState([]);
   const [startingInterviewId, setStartingInterviewId] = useState(null);
   const [questionsModal, setQuestionsModal] = useState({ open: false, title: '', company: '', questions: [] });
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
     fetchRecommendations();
   }, []);
+
+  const handleResumeUpload = async (file) => {
+    if (!file) return;
+    if (file.type !== 'application/pdf') {
+      return toast.error('Please upload a PDF resume file.');
+    }
+    setUploading(true);
+    const toastId = toast.loading('Uploading and parsing resume with AI...');
+    try {
+      const formData = new FormData();
+      formData.append('resume', file);
+      const { data } = await resumeAPI.upload(formData);
+      if (data.resume?._id) {
+        await resumeAPI.parse(data.resume._id);
+      }
+      toast.success('Resume uploaded & parsed successfully! 🚀', { id: toastId });
+      setShowUploadModal(false);
+      await fetchRecommendations();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to upload resume', { id: toastId });
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const fetchRecommendations = async () => {
     setLoading(true);
@@ -97,6 +123,14 @@ export default function RecommendedJobs() {
             Personalized listings scored and matched against your uploaded resume skills.
           </p>
         </div>
+
+        <button
+          onClick={() => setShowUploadModal(true)}
+          className="flex items-center gap-2 px-4 py-2.5 bg-brand-600/20 border border-brand-500/40 text-brand-300 hover:bg-brand-600/30 text-sm font-semibold rounded-xl transition-all self-start md:self-auto"
+        >
+          <Upload className="w-4 h-4" />
+          {hasResume ? 'Upload New Resume' : 'Upload Resume'}
+        </button>
       </div>
 
       {/* Empty State: No Resumes Uploaded */}
@@ -110,11 +144,11 @@ export default function RecommendedJobs() {
             Personalized matches require parsed resume profile skills. Upload your resume to unlock scoring recommendations.
           </p>
           <button 
-            onClick={() => navigate('/resumes')}
+            onClick={() => setShowUploadModal(true)}
             className="btn-primary"
           >
-            Upload Resume
-            <ArrowRight className="w-4 h-4" />
+            <Upload className="w-4 h-4" />
+            Upload Resume Now
           </button>
         </div>
       )}
@@ -278,6 +312,66 @@ export default function RecommendedJobs() {
               >
                 Done
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Direct Resume Upload Modal Overlay */}
+      {showUploadModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
+          <div className="relative w-full max-w-lg bg-slate-900 border border-slate-800 rounded-3xl p-6 md:p-8 shadow-2xl overflow-hidden">
+            <button
+              onClick={() => setShowUploadModal(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-white transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-3 mb-6">
+              <div className="p-3 bg-brand-500/10 rounded-2xl">
+                <Upload className="w-6 h-6 text-brand-400" />
+              </div>
+              <div>
+                <h3 className="text-xl font-display font-black text-white">Upload Resume for Job Matching</h3>
+                <p className="text-xs text-slate-400">AI will parse your skills to calculate real-time match scores</p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <label className="flex flex-col items-center justify-center w-full h-48 border-2 border-dashed border-slate-700 hover:border-brand-500/60 rounded-2xl cursor-pointer bg-slate-950/60 transition-all group">
+                <input
+                  type="file"
+                  accept=".pdf"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleResumeUpload(file);
+                  }}
+                  disabled={uploading}
+                />
+                {uploading ? (
+                  <div className="flex flex-col items-center gap-2">
+                    <Loader2 className="w-8 h-8 text-brand-400 animate-spin" />
+                    <p className="text-sm font-medium text-slate-300">Uploading & extracting skills...</p>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center text-center p-4">
+                    <FileText className="w-10 h-10 text-slate-500 group-hover:text-brand-400 transition-colors mb-2" />
+                    <p className="text-sm font-bold text-white mb-1">Click to upload or drag & drop</p>
+                    <p className="text-xs text-slate-400">PDF files up to 10MB</p>
+                  </div>
+                )}
+              </label>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setShowUploadModal(false)}
+                  className="btn-ghost text-xs text-slate-400"
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
           </div>
         </div>

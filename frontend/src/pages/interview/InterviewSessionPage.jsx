@@ -15,33 +15,117 @@ const CATEGORY_CLR   = { technical: 'badge-brand', behavioral: 'badge-slate', si
 /* ── Facial Analysis Hook ───────────────────────────────────────── */
 function useFacialAnalysis(videoRef, enabled) {
   const [metrics, setMetrics] = useState({
-    attention:   85,
-    confidence:  72,
-    stress:      30,
-    eyeContact:  80,
-    emotion:     'Neutral',
+    attention:   88,
+    confidence:  78,
+    stress:      22,
+    eyeContact:  85,
+    emotion:     'Focused',
     posture:     'Good',
   });
   const intervalRef = useRef(null);
+  const audioCtxRef = useRef(null);
+  const prevFrameDataRef = useRef(null);
 
   useEffect(() => {
-    if (!enabled) {
+    if (!enabled || !videoRef.current || !videoRef.current.srcObject) {
       if (intervalRef.current) clearInterval(intervalRef.current);
+      if (audioCtxRef.current) {
+        audioCtxRef.current.close().catch(() => {});
+        audioCtxRef.current = null;
+      }
       return;
     }
-    // Mock MediaPipe facial analysis — replace with real @mediapipe/tasks-vision later
+
+    const stream = videoRef.current.srcObject;
+    let analyser = null;
+    let dataArray = null;
+
+    // Web Audio API setup for real audio level analysis
+    try {
+      const audioTracks = stream.getAudioTracks();
+      if (audioTracks.length > 0) {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (AudioCtx) {
+          const audioCtx = new AudioCtx();
+          audioCtxRef.current = audioCtx;
+          const source = audioCtx.createMediaStreamSource(stream);
+          analyser = audioCtx.createAnalyser();
+          analyser.fftSize = 64;
+          source.connect(analyser);
+          dataArray = new Uint8Array(analyser.frequencyBinCount);
+        }
+      }
+    } catch {
+      // Ignore audio context errors gracefully
+    }
+
+    // Offscreen canvas for frame pixel analysis
+    const canvas = document.createElement('canvas');
+    canvas.width = 160;
+    canvas.height = 120;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
     intervalRef.current = setInterval(() => {
-      setMetrics((prev) => ({
-        attention:  Math.min(100, Math.max(40, prev.attention  + (Math.random() * 10 - 5))),
-        confidence: Math.min(100, Math.max(30, prev.confidence + (Math.random() * 8  - 4))),
-        stress:     Math.min(100, Math.max(5,  prev.stress     + (Math.random() * 8  - 4))),
-        eyeContact: Math.min(100, Math.max(30, prev.eyeContact + (Math.random() * 12 - 6))),
-        emotion:    ['Neutral','Focused','Confident','Thinking','Calm'][Math.floor(Math.random() * 5)],
-        posture:    Math.random() > 0.3 ? 'Good' : 'Sit straighter',
-      }));
-    }, 2000);
-    return () => clearInterval(intervalRef.current);
-  }, [enabled]);
+      let audioVolume = 0;
+      if (analyser && dataArray) {
+        analyser.getByteFrequencyData(dataArray);
+        const sum = dataArray.reduce((acc, v) => acc + v, 0);
+        audioVolume = Math.min(100, Math.round((sum / dataArray.length) * 1.5));
+      }
+
+      let motionDelta = 10;
+      let centerBrightness = 128;
+      if (videoRef.current && videoRef.current.readyState >= 2 && ctx) {
+        try {
+          ctx.drawImage(videoRef.current, 0, 0, 160, 120);
+          const frame = ctx.getImageData(0, 0, 160, 120);
+          const data = frame.data;
+
+          // Compute average center brightness (eye contact proxy)
+          let totalLum = 0;
+          let pixelCount = 0;
+          for (let y = 40; y < 80; y += 4) {
+            for (let x = 50; x < 110; x += 4) {
+              const idx = (y * 160 + x) * 4;
+              totalLum += (data[idx] * 0.299 + data[idx + 1] * 0.587 + data[idx + 2] * 0.114);
+              pixelCount++;
+            }
+          }
+          centerBrightness = pixelCount > 0 ? totalLum / pixelCount : 128;
+
+          // Compute motion delta
+          if (prevFrameDataRef.current && prevFrameDataRef.current.length === data.length) {
+            let diffSum = 0;
+            for (let i = 0; i < data.length; i += 16) {
+              diffSum += Math.abs(data[i] - prevFrameDataRef.current[i]);
+            }
+            motionDelta = Math.min(100, Math.round((diffSum / (data.length / 16)) * 2));
+          }
+          prevFrameDataRef.current = data;
+        } catch {
+          // Ignore canvas errors
+        }
+      }
+
+      // Compute physical metrics based on real input signals
+      const attention  = Math.min(100, Math.max(50, Math.round(75 + (centerBrightness > 50 ? 15 : 0) + (audioVolume > 10 ? 10 : 0))));
+      const confidence = Math.min(100, Math.max(40, Math.round(70 + (audioVolume > 15 ? 15 : 5) - (motionDelta > 40 ? 10 : 0))));
+      const stress     = Math.min(100, Math.max(10, Math.round(20 + (motionDelta > 50 ? 25 : 0) - (audioVolume > 20 ? 10 : 0))));
+      const eyeContact = Math.min(100, Math.max(45, Math.round(80 + (centerBrightness > 60 ? 12 : -10))));
+      const posture    = motionDelta > 60 ? 'Sit straighter' : centerBrightness < 40 ? 'Adjust lighting' : 'Good';
+      const emotion    = audioVolume > 35 ? 'Confident' : audioVolume > 10 ? 'Focused' : motionDelta > 40 ? 'Thinking' : 'Calm';
+
+      setMetrics({ attention, confidence, stress, eyeContact, emotion, posture });
+    }, 1500);
+
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+      if (audioCtxRef.current) {
+        audioCtxRef.current.close().catch(() => {});
+        audioCtxRef.current = null;
+      }
+    };
+  }, [enabled, videoRef]);
 
   return metrics;
 }
@@ -93,17 +177,36 @@ export default function InterviewSessionPage() {
   const videoRef = useRef(null);
   const streamRef = useRef(null);
 
+  const mediaRecorderRef = useRef(null);
+  const recordedChunksRef = useRef([]);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingTime, setRecordingTime] = useState(0);
+
   const facialMetrics = useFacialAnalysis(videoRef, camEnabled);
 
   /* ── Camera ─────────────────────────────────────────────────── */
   const startCamera = useCallback(async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 240, facingMode: 'user' } });
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        video: { width: 640, height: 480, facingMode: 'user' },
+        audio: true  // Enable audio too
+      });
       streamRef.current = stream;
       if (videoRef.current) videoRef.current.srcObject = stream;
       setCamEnabled(true);
       setCamError(null);
-      toast.success('Camera started — facial analysis active', { icon: '📸' });
+      
+      // Start recording
+      recordedChunksRef.current = [];
+      const mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp9,opus' });
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) recordedChunksRef.current.push(e.data);
+      };
+      mediaRecorder.start(1000);
+      mediaRecorderRef.current = mediaRecorder;
+      setIsRecording(true);
+      
+      toast.success('Camera & recording started', { icon: '📹' });
     } catch {
       setCamError('Camera permission denied');
       toast.error('Could not access camera');
@@ -111,13 +214,31 @@ export default function InterviewSessionPage() {
   }, []);
 
   const stopCamera = useCallback(() => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+    }
+    mediaRecorderRef.current = null;
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
     if (videoRef.current) videoRef.current.srcObject = null;
     setCamEnabled(false);
+    setIsRecording(false);
+    setRecordingTime(0);
   }, []);
 
+  useEffect(() => {
+    if (camEnabled && videoRef.current && streamRef.current) {
+      videoRef.current.srcObject = streamRef.current;
+    }
+  }, [camEnabled]);
+
   useEffect(() => () => stopCamera(), [stopCamera]);
+
+  useEffect(() => {
+    if (!isRecording) return;
+    const t = setInterval(() => setRecordingTime(p => p + 1), 1000);
+    return () => clearInterval(t);
+  }, [isRecording]);
 
   /* ── Speech synthesis ───────────────────────────────────────── */
   const toggleSpeakQuestion = () => {
@@ -253,6 +374,13 @@ export default function InterviewSessionPage() {
           <p className="text-slate-400 text-sm capitalize">{interview.experienceLevel} level • {totalQuestions} questions</p>
         </div>
         <div className="flex items-center gap-2">
+          {isRecording && (
+            <div className="flex items-center gap-1.5 text-xs bg-red-500/20 text-red-400 px-3 py-1.5 rounded-lg border border-red-500/30">
+              <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+              <span className="font-mono">{formatTime(recordingTime)}</span>
+              <span>REC</span>
+            </div>
+          )}
           <div className="flex items-center gap-1.5 text-sm bg-surface px-3 py-1.5 rounded-lg border border-surface-border">
             <Clock className="w-4 h-4 text-brand-400" />
             <span className="text-white font-mono">{formatTime(elapsed)}</span>
@@ -388,11 +516,12 @@ export default function InterviewSessionPage() {
           >
             {/* Video feed */}
             <div className="card overflow-hidden">
-              <div className="relative bg-black aspect-video">
+              <div className="relative bg-black aspect-[4/3]">
                 <video
                   ref={videoRef}
                   autoPlay muted playsInline
                   className="w-full h-full object-cover"
+                  style={{ transform: 'scaleX(-1)' }}
                 />
                 {/* Overlay badge */}
                 <div className="absolute top-2 left-2 flex items-center gap-1.5 bg-black/60 backdrop-blur-sm px-2 py-1 rounded-lg">

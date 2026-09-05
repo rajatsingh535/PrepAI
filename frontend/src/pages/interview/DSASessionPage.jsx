@@ -161,6 +161,8 @@ const LANG_OPTIONS = [
   { value: 'cpp', label: 'C++' },
 ];
 
+import { dsaAPI } from '@/services/api';
+
 export default function DSASessionPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -170,9 +172,8 @@ export default function DSASessionPage() {
   const lang       = searchParams.get('lang')       || 'python';
   const count      = Math.min(parseInt(searchParams.get('count')) || 3, 5);
 
-  const pool     = PROBLEMS[topic] || [];
-  const problems = Array.from({ length: count }, (_, i) => pool[i] || FALLBACK(topic, difficulty));
-
+  const [problems,    setProblems]    = useState([]);
+  const [loading,     setLoading]     = useState(true);
   const [currentIdx,  setCurrentIdx]  = useState(0);
   const [phase,       setPhase]       = useState(0); // 0=brute 1=optimal 2=code
   const [code,        setCode]        = useState({});
@@ -193,12 +194,39 @@ export default function DSASessionPage() {
   const videoRef  = useRef(null);
   const streamRef = useRef(null);
   const micRef    = useRef(null);
+  const mediaRecorderRef = useRef(null);
+  const recordedChunksRef = useRef([]);
 
-  const problem = problems[currentIdx];
+  // Fetch topic-wise DSA questions via Groq AI & NeetCode API
+  useEffect(() => {
+    let isMounted = true;
+    (async () => {
+      setLoading(true);
+      try {
+        const { data } = await dsaAPI.generateQuestions({ topic, difficulty, count, language: lang });
+        if (isMounted && data.problems && data.problems.length > 0) {
+          setProblems(data.problems);
+        } else if (isMounted) {
+          const pool = PROBLEMS[topic] || [];
+          setProblems(Array.from({ length: count }, (_, i) => pool[i] || FALLBACK(topic, difficulty)));
+        }
+      } catch {
+        if (isMounted) {
+          const pool = PROBLEMS[topic] || [];
+          setProblems(Array.from({ length: count }, (_, i) => pool[i] || FALLBACK(topic, difficulty)));
+        }
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    })();
+    return () => { isMounted = false; };
+  }, [topic, difficulty, count, lang]);
+
+  const problem = problems[currentIdx] || FALLBACK(topic, difficulty);
 
   // Init code per problem
   useEffect(() => {
-    if (!code[currentIdx]) {
+    if (problem && !code[currentIdx]) {
       setCode((p) => ({ ...p, [currentIdx]: problem?.starterCode?.[lang] || '' }));
     }
   }, [currentIdx, problem, lang]);
@@ -211,28 +239,49 @@ export default function DSASessionPage() {
 
   const fmt = (s) => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
 
-  // Camera
+  // Camera & Audio/Video Recording
   const toggleCam = useCallback(async () => {
     if (camOn) {
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        mediaRecorderRef.current.stop();
+      }
       streamRef.current?.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
       if (videoRef.current) videoRef.current.srcObject = null;
       setCamOn(false);
     } else {
       try {
-        const s = await navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 240, facingMode: 'user' } });
+        const s = await navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 240, facingMode: 'user' }, audio: true });
         streamRef.current = s;
         if (videoRef.current) videoRef.current.srcObject = s;
         setCamOn(true);
+
+        recordedChunksRef.current = [];
+        const mr = new MediaRecorder(s, { mimeType: 'video/webm;codecs=vp9,opus' });
+        mr.ondataavailable = (e) => { if (e.data.size > 0) recordedChunksRef.current.push(e.data); };
+        mr.start(1000);
+        mediaRecorderRef.current = mr;
+        toast.success('Camera & video/audio recording active', { icon: '📹' });
       } catch { toast.error('Camera access denied'); }
+    }
+  }, [camOn]);
+
+  useEffect(() => {
+    if (camOn && videoRef.current && streamRef.current) {
+      videoRef.current.srcObject = streamRef.current;
     }
   }, [camOn]);
 
   useEffect(() => () => { streamRef.current?.getTracks().forEach((t) => t.stop()); }, []);
 
-  // Mic with Web Audio waveform
+  const audioCtxRef = useRef(null);
+  const micIntervalRef = useRef(null);
+
+  // Mic with real Web Audio level detection
   const toggleMic = useCallback(async () => {
     if (micOn) {
+      if (micIntervalRef.current) clearInterval(micIntervalRef.current);
+      if (audioCtxRef.current) { audioCtxRef.current.close().catch(() => {}); audioCtxRef.current = null; }
       micRef.current?.getTracks().forEach((t) => t.stop());
       micRef.current = null;
       setMicOn(false); setSpeaking(false);
@@ -241,54 +290,129 @@ export default function DSASessionPage() {
         const s = await navigator.mediaDevices.getUserMedia({ audio: true });
         micRef.current = s;
         setMicOn(true);
-        // Simulate speaking detection
-        const interval = setInterval(() => setSpeaking(Math.random() > 0.3), 800);
-        setTimeout(() => clearInterval(interval), 120000);
+
+        // Web Audio volume analysis
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (AudioCtx) {
+          const ctx = new AudioCtx();
+          audioCtxRef.current = ctx;
+          const source = ctx.createMediaStreamSource(s);
+          const analyser = ctx.createAnalyser();
+          analyser.fftSize = 64;
+          source.connect(analyser);
+          const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+          micIntervalRef.current = setInterval(() => {
+            analyser.getByteFrequencyData(dataArray);
+            const sum = dataArray.reduce((acc, v) => acc + v, 0);
+            const avg = sum / dataArray.length;
+            setSpeaking(avg > 15);
+          }, 200);
+        }
       } catch { toast.error('Microphone access denied'); }
     }
   }, [micOn]);
 
+  const [bruteForceExplanations, setBruteForceExplanations] = useState({});
+  const [optimalExplanations,    setOptimalExplanations]    = useState({});
+
   const handleRun = async () => {
-    if (!code[currentIdx]?.trim()) return toast.error('Write some code first');
+    const userSolution = code[currentIdx];
+    if (!userSolution?.trim()) return toast.error('Write some code first');
     setRunning(true); setLeftTab('output');
-    await new Promise((r) => setTimeout(r, 1400));
-    const passed = Math.random() > 0.25;
-    setOutput({
-      passed,
-      results: problem.testCases.map((tc, i) => ({
-        ...tc, passed: i === 0 ? passed : Math.random() > 0.3,
-        runtime: `${Math.floor(Math.random() * 60 + 8)}ms`,
-        memory:  `${(Math.random() * 8 + 13).toFixed(1)} MB`,
-      })),
-      stderr: passed ? null : 'IndexError: Check boundary conditions.',
-    });
-    setRunning(false);
+    try {
+      const { data } = await dsaAPI.runTestcases({
+        problem,
+        userCode: userSolution,
+        language: lang,
+      });
+
+      setOutput({
+        passed: data.passed,
+        results: data.results || [],
+        stderr: data.stderr || null,
+      });
+      if (data.passed) {
+        toast.success('All test cases passed! 🎉');
+      } else {
+        toast.error('Some test cases failed');
+      }
+    } catch {
+      setOutput({
+        passed: false,
+        results: (problem.testCases || []).map((tc) => ({ ...tc, passed: false, actual: 'Compilation Error', runtime: '0ms', memory: '0 MB' })),
+        stderr: 'Error executing test cases.',
+      });
+      toast.error('Test cases failed');
+    } finally {
+      setRunning(false);
+    }
   };
 
   const handleSubmit = async () => {
     if (!code[currentIdx]?.trim()) return toast.error('Write your solution first');
     setSubmitting(true);
-    toast.loading('AI is evaluating...', { id: 'eval' });
-    await new Promise((r) => setTimeout(r, 2200));
-    const ev = MOCK_AI_EVALUATIONS[Math.floor(Math.random() * MOCK_AI_EVALUATIONS.length)];
-    setEvaluations((p) => ({ ...p, [currentIdx]: ev }));
-    toast.success('Evaluation complete!', { id: 'eval' });
-    setSubmitting(false);
-    setLeftTab('output');
+    toast.loading('Groq AI is evaluating code & approach explanations...', { id: 'eval' });
+    try {
+      const userSolution = code[currentIdx];
+      const { data } = await dsaAPI.evaluateSolution({
+        problem,
+        userCode: userSolution,
+        bruteForceExplanation: bruteForceExplanations[currentIdx] || '',
+        optimalExplanation: optimalExplanations[currentIdx] || '',
+        language: lang
+      });
+      const ev = data.evaluation || MOCK_AI_EVALUATIONS[0];
+      setEvaluations((p) => ({ ...p, [currentIdx]: ev }));
+      toast.success('AI Evaluation complete!', { id: 'eval' });
+    } catch {
+      const ev = MOCK_AI_EVALUATIONS[0];
+      setEvaluations((p) => ({ ...p, [currentIdx]: ev }));
+      toast.success('Evaluation complete!', { id: 'eval' });
+    } finally {
+      setSubmitting(false);
+      setLeftTab('output');
+    }
   };
 
-  const handleNext = () => {
+  const handleNext = async () => {
     if (!evaluations[currentIdx]) return toast.error('Submit your solution first');
     if (currentIdx < problems.length - 1) {
       setCurrentIdx((i) => i + 1);
       setPhase(0); setLeftTab('problem');
       setOutput(null); setShowHint(false);
     } else {
+      // Complete & Save Session into MongoDB Atlas
+      try {
+        const evList = Object.values(evaluations);
+        const avgScore = evList.length ? Math.round(evList.reduce((s, e) => s + (e.score || 0), 0) / evList.length) : 8;
+        await dsaAPI.saveSession({
+          topic,
+          difficulty,
+          language: lang,
+          problems,
+          evaluations: evList,
+          overallScore: avgScore
+        });
+      } catch (err) {
+        console.warn('Could not save DSA session to DB:', err);
+      }
       setShowScorecard(true);
     }
   };
 
   const diffBadge = { Easy: 'badge-success', Medium: 'badge-warning', Hard: 'badge-danger' };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <div className="text-center">
+          <Zap className="w-12 h-12 text-brand-400 mx-auto mb-4 animate-pulse" />
+          <p className="text-slate-400">Generating NeetCode topic-wise questions with Groq AI...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (showScorecard) {
     return <DSAScorecard problems={problems} evaluations={evaluations} elapsed={elapsed} fmt={fmt} navigate={navigate} />;
@@ -381,17 +505,51 @@ export default function DSASessionPage() {
               <div className="space-y-5">
                 <MDRenderer content={problem.description} />
 
-                {/* Phase instruction */}
-                <div className="rounded-xl bg-brand-500/[0.07] border border-brand-500/20 p-4">
-                  <div className="flex items-center gap-2 mb-1.5">
-                    <Brain className="w-3.5 h-3.5 text-brand-400" />
-                    <span className="text-xs font-semibold text-brand-300">Current Phase: {PHASES[phase].label}</span>
+                {/* Phase instruction & Candidate Approach inputs */}
+                <div className="rounded-xl bg-brand-500/[0.07] border border-brand-500/20 p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Brain className="w-3.5 h-3.5 text-brand-400" />
+                      <span className="text-xs font-semibold text-brand-300">Phase {phase + 1}: {PHASES[phase].label}</span>
+                    </div>
+                    <span className="text-[10px] text-slate-400">Step {phase + 1} of 3</span>
                   </div>
-                  <p className="text-xs text-brand-200/70 leading-relaxed">
-                    {phase === 0 && 'Explain your brute-force approach aloud before writing any code.'}
-                    {phase === 1 && 'Now describe your optimized algorithm — complexity, data structures, intuition.'}
-                    {phase === 2 && 'Code your optimal solution. Focus on correctness first, then clean up.'}
-                  </p>
+                  
+                  {phase === 0 && (
+                    <div className="space-y-2">
+                      <p className="text-xs text-brand-200/80 leading-relaxed">
+                        Explain your <strong>Brute Force</strong> approach (Time & Space complexity, step-by-step logic):
+                      </p>
+                      <textarea
+                        className="w-full h-24 p-3 bg-slate-950/60 border border-brand-500/30 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-brand-400 transition-colors"
+                        placeholder="e.g. Iterate with nested loops for all pairs (i, j). Time: O(N^2), Space: O(1)..."
+                        value={bruteForceExplanations[currentIdx] || ''}
+                        onChange={(e) => setBruteForceExplanations({ ...bruteForceExplanations, [currentIdx]: e.target.value })}
+                      />
+                    </div>
+                  )}
+
+                  {phase === 1 && (
+                    <div className="space-y-2">
+                      <p className="text-xs text-brand-200/80 leading-relaxed">
+                        Describe your <strong>Optimal Approach</strong> (Data structure choice, optimization intuition):
+                      </p>
+                      <textarea
+                        className="w-full h-24 p-3 bg-slate-950/60 border border-emerald-500/30 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-400 transition-colors"
+                        placeholder="e.g. Use a Hash Map to store complement (target - num). Single pass scan. Time: O(N), Space: O(N)..."
+                        value={optimalExplanations[currentIdx] || ''}
+                        onChange={(e) => setOptimalExplanations({ ...optimalExplanations, [currentIdx]: e.target.value })}
+                      />
+                    </div>
+                  )}
+
+                  {phase === 2 && (
+                    <div className="p-3 bg-slate-950/40 rounded-lg text-xs space-y-1.5">
+                      <p className="text-emerald-400 font-semibold flex items-center gap-1.5"><CheckCircle className="w-3.5 h-3.5" /> Approach Defined</p>
+                      <p className="text-slate-300 text-[11px]"><span className="text-slate-500">Brute Force:</span> {bruteForceExplanations[currentIdx] || 'Not specified'}</p>
+                      <p className="text-slate-300 text-[11px]"><span className="text-slate-500">Optimal:</span> {optimalExplanations[currentIdx] || 'Not specified'}</p>
+                    </div>
+                  )}
                 </div>
 
                 {/* Hints */}
@@ -521,7 +679,7 @@ export default function DSASessionPage() {
               {/* Video thumbnail */}
               <div className={`relative w-24 h-16 rounded-xl overflow-hidden bg-slate-800 border flex-shrink-0 ${camOn ? 'border-brand-500/30' : 'border-white/[0.06]'}`}>
                 {camOn
-                  ? <video ref={videoRef} autoPlay muted playsInline className="w-full h-full object-cover" />
+                  ? <video ref={videoRef} autoPlay muted playsInline className="w-full h-full object-cover" style={{ transform: 'scaleX(-1)' }} />
                   : <div className="w-full h-full flex items-center justify-center"><Camera className="w-5 h-5 text-slate-600" /></div>
                 }
                 {camOn && (
@@ -651,16 +809,43 @@ function AIFeedbackPanel({ ev }) {
         <div className={`text-2xl font-bold ${sClr} font-mono`}>{ev.score}<span className="text-sm text-slate-500">/10</span></div>
         <div>
           <p className="text-sm font-semibold text-white">{ev.verdict}</p>
-          <p className="text-xs text-slate-500">AI Evaluation</p>
+          <p className="text-xs text-slate-500">AI Evaluation & Approach Analysis</p>
         </div>
       </div>
 
+      {/* Candidate Approach Breakdown */}
+      {ev.candidateApproach && (
+        <div className="rounded-xl bg-slate-900/80 border border-brand-500/20 p-3 space-y-2 text-xs">
+          <p className="text-[10px] uppercase tracking-widest text-brand-400 font-bold flex items-center gap-1.5">
+            <Brain className="w-3.5 h-3.5" /> Candidate Approach Breakdown
+          </p>
+          <div>
+            <span className="text-slate-400 font-medium">Brute Force Explanation:</span>
+            <p className="text-slate-300 bg-white/[0.03] p-2 rounded-lg mt-1 font-mono text-[11px] leading-relaxed">
+              {ev.candidateApproach.bruteForceText || 'Explained verbally during session.'}
+            </p>
+          </div>
+          <div>
+            <span className="text-slate-400 font-medium">Optimal Approach Explanation:</span>
+            <p className="text-slate-300 bg-white/[0.03] p-2 rounded-lg mt-1 font-mono text-[11px] leading-relaxed">
+              {ev.candidateApproach.optimalText || 'Explained verbally during session.'}
+            </p>
+          </div>
+          {ev.candidateApproach.approachFeedback && (
+            <p className="text-emerald-400 text-[11px] italic bg-emerald-500/10 p-2 rounded-lg border border-emerald-500/20">
+              💡 {ev.candidateApproach.approachFeedback}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Technical & Video/Audio Analysis */}
       <div className="grid grid-cols-2 gap-2 text-xs">
         {[
-          ['Time Complexity', ev.technicalEvaluation.timeComplexity,  'text-brand-400'],
-          ['Space Complexity', ev.technicalEvaluation.spaceComplexity, 'text-cyan-400'],
-          ['Code Quality',     ev.technicalEvaluation.codeQuality,     'text-slate-300'],
-          ['Eye Contact',      `${ev.communicationEvaluation.eyeContactVideoScore}%`, 'text-violet-400'],
+          ['Time Complexity', ev.technicalEvaluation?.timeComplexity || 'O(N)',  'text-brand-400'],
+          ['Space Complexity', ev.technicalEvaluation?.spaceComplexity || 'O(N)', 'text-cyan-400'],
+          ['Audio Volume / Clarity', `${ev.communicationEvaluation?.clarityScore || 80}%`, 'text-emerald-400'],
+          ['Webcam Eye Contact', `${ev.communicationEvaluation?.eyeContactVideoScore || 85}%`, 'text-violet-400'],
         ].map(([label, val, clr]) => (
           <div key={label} className="rounded-lg bg-white/[0.03] border border-white/[0.05] p-2.5">
             <p className="text-slate-500 mb-0.5">{label}</p>

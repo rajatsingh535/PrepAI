@@ -1,6 +1,7 @@
+const fs = require('fs');
+const path = require('path');
 const pdf = require('pdf-parse');
 const Resume = require('../models/Resume.model');
-const cloudinary = require('../config/cloudinary');
 const AppError = require('../utils/AppError');
 const { parseResumeAndJD } = require('../services/ai.service');
 const { chunkDocument, chunkResumeAndJD, estimateTokens } = require('../services/chunking.service');
@@ -13,7 +14,8 @@ exports.uploadResume = async (req, res, next) => {
     return next(new AppError('Please upload a file.', 400));
   }
 
-  const { path: fileUrl, originalname, filename, size, mimetype } = req.file;
+  const { originalname, filename, size, mimetype, path: filePath } = req.file;
+  const fileUrl = `/uploads/${filename}`;
 
   // Extract text from PDF for AI context
   let extractedText = null;
@@ -21,9 +23,7 @@ exports.uploadResume = async (req, res, next) => {
 
   try {
     if (mimetype === 'application/pdf') {
-      const response = await fetch(fileUrl);
-      const arrayBuffer = await response.arrayBuffer();
-      const buffer = Buffer.from(arrayBuffer);
+      const buffer = fs.readFileSync(filePath);
       const pdfData = await pdf(buffer);
       extractedText = pdfData.text?.slice(0, 8000) ?? null; // Limit to 8k chars
       parseStatus = 'parsed';
@@ -80,12 +80,9 @@ exports.deleteResume = async (req, res, next) => {
   const resume = await Resume.findOne({ _id: req.params.id, userId: req.user._id });
   if (!resume) return next(new AppError('Resume not found.', 404));
 
-  // Delete from Cloudinary
-  try {
-    await cloudinary.uploader.destroy(resume.publicId, { resource_type: 'raw' });
-  } catch {
-    // Log but don't fail deletion
-  }
+  // Delete from Disk
+  const filePath = path.join(__dirname, '../../uploads', path.basename(resume.fileUrl));
+  try { if (fs.existsSync(filePath)) fs.unlinkSync(filePath); } catch {}
 
   await resume.deleteOne();
   res.status(200).json({ success: true, message: 'Resume deleted successfully.' });

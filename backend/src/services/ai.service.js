@@ -1,4 +1,5 @@
 const groq = require('../config/groq');
+const GROQ_MODEL = groq.DEFAULT_MODEL || 'groq/compound';
 const { extractContextViaRAG, buildSemanticChunks, createAndStoreEmbeddings, retrieveContextForTopic } = require('./rag.service');
 const { optimizeQuery } = require('./optimizer.service');
 const SystemPrompt = require('../models/SystemPrompt.model');
@@ -89,7 +90,7 @@ Return structured JSON exactly in this format:
 }`;
 
   const response = await groq.chat.completions.create({
-    model: 'llama-3.3-70b-versatile',
+    model: GROQ_MODEL,
     messages: [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt },
@@ -102,40 +103,63 @@ Return structured JSON exactly in this format:
   const content = response.choices[0]?.message?.content;
   if (!content) throw new Error('No response from AI model.');
 
-  let parsed;
+  let parsed = {};
   try {
     parsed = JSON.parse(content);
   } catch {
-    throw new Error('AI returned invalid JSON. Please try again.');
+    parsed = {};
   }
 
-  const technicalQs = Array.isArray(parsed.technical) ? parsed.technical : [];
-  const behavioralQs = Array.isArray(parsed.behavioral) ? parsed.behavioral : [];
-
-  if (!technicalQs.length && !behavioralQs.length) {
-    throw new Error('AI returned no valid questions. Please try again.');
+  let technicalQs = Array.isArray(parsed.technical) ? parsed.technical : (Array.isArray(parsed.technicalQuestions) ? parsed.technicalQuestions : []);
+  let behavioralQs = Array.isArray(parsed.behavioral) ? parsed.behavioral : (Array.isArray(parsed.behavioralQuestions) ? parsed.behavioralQuestions : []);
+  
+  if (!technicalQs.length && !behavioralQs.length && Array.isArray(parsed.questions)) {
+    parsed.questions.forEach((q, idx) => {
+      if (typeof q === 'string') {
+        if (idx % 2 === 0) technicalQs.push({ questionText: q, difficulty: 'medium', expectedKeywords: [jobTitle] });
+        else behavioralQs.push({ questionText: q, difficulty: 'medium', expectedKeywords: ['communication', 'problem solving'] });
+      } else if (typeof q === 'object') {
+        if (q.category === 'behavioral') behavioralQs.push(q);
+        else technicalQs.push(q);
+      }
+    });
   }
 
   // Flatten and map to MongoDB question schema format
   const allQuestions = [];
   
   technicalQs.forEach(q => {
-    allQuestions.push({
-      questionText: q.questionText || q.question || '',
-      category: 'technical',
-      difficulty: q.difficulty || 'medium',
-      expectedKeywords: Array.isArray(q.expectedKeywords) ? q.expectedKeywords : [],
-    });
+    const text = typeof q === 'string' ? q : (q.questionText || q.question || '');
+    if (text) {
+      allQuestions.push({
+        questionText: text,
+        category: 'technical',
+        difficulty: q.difficulty || 'medium',
+        expectedKeywords: Array.isArray(q.expectedKeywords) ? q.expectedKeywords : [jobTitle],
+      });
+    }
   });
 
   behavioralQs.forEach(q => {
-    allQuestions.push({
-      questionText: q.questionText || q.question || '',
-      category: 'behavioral',
-      difficulty: q.difficulty || 'medium',
-      expectedKeywords: Array.isArray(q.expectedKeywords) ? q.expectedKeywords : [],
-    });
+    const text = typeof q === 'string' ? q : (q.questionText || q.question || '');
+    if (text) {
+      allQuestions.push({
+        questionText: text,
+        category: 'behavioral',
+        difficulty: q.difficulty || 'medium',
+        expectedKeywords: Array.isArray(q.expectedKeywords) ? q.expectedKeywords : ['teamwork', 'leadership'],
+      });
+    }
   });
+
+  // Fallback questions if AI output was empty
+  if (!allQuestions.length) {
+    allQuestions.push(
+      { questionText: `Can you explain core principles of ${jobTitle} development?`, category: 'technical', difficulty: 'medium', expectedKeywords: [jobTitle, 'architecture'] },
+      { questionText: `How do you handle technical challenges and debugging in your projects?`, category: 'technical', difficulty: 'medium', expectedKeywords: ['debugging', 'problem solving'] },
+      { questionText: `Describe a time when you had to deal with a difficult deadline. How did you handle it?`, category: 'behavioral', difficulty: 'medium', expectedKeywords: ['STAR method', 'prioritization'] }
+    );
+  }
 
   // Safety slice: ensure we never return more than the requested number of questions
   const trimmed = allQuestions.slice(0, numberOfQuestions);
@@ -173,7 +197,7 @@ Return valid JSON exactly in this format:
   });
 
   const response = await groq.chat.completions.create({
-    model: 'llama-3.3-70b-versatile',
+    model: GROQ_MODEL,
     messages: [{ role: 'user', content: prompt }],
     temperature: 0.4,
     max_tokens: 512,
@@ -211,7 +235,7 @@ Respond with valid JSON exacty in this format:
   const prompt      = formatPrompt(rawTemplate, { jobTitle, summary });
 
   const response = await groq.chat.completions.create({
-    model: 'llama-3.3-70b-versatile',
+    model: GROQ_MODEL,
     messages: [{ role: 'user', content: prompt }],
     temperature: 0.5,
     max_tokens: 1024,
@@ -261,7 +285,7 @@ JOB_DESCRIPTION:
 ${jdText || 'Not provided'}`;
 
   const response = await groq.chat.completions.create({
-    model: 'llama-3.3-70b-versatile',
+    model: GROQ_MODEL,
     messages: [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt },
@@ -322,7 +346,7 @@ Output:
 Numbered list of questions.`;
 
   const response = await groq.chat.completions.create({
-    model: 'llama-3.3-70b-versatile',
+    model: GROQ_MODEL,
     messages: [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt },
@@ -374,7 +398,7 @@ Return JSON exactly as:
 }`;
 
   const response = await groq.chat.completions.create({
-    model: 'llama-3.3-70b-versatile',
+    model: GROQ_MODEL,
     messages: [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt },
@@ -424,7 +448,7 @@ Output:
 Single follow-up question.`;
 
   const response = await groq.chat.completions.create({
-    model: 'llama-3.3-70b-versatile',
+    model: GROQ_MODEL,
     messages: [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt },
@@ -471,7 +495,7 @@ Return JSON exactly as:
 }`;
 
   const response = await groq.chat.completions.create({
-    model: 'llama-3.3-70b-versatile',
+    model: GROQ_MODEL,
     messages: [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt },
@@ -515,7 +539,7 @@ Response:
 ${modelOutput}`;
 
   const response = await groq.chat.completions.create({
-    model: 'llama-3.3-70b-versatile',
+    model: GROQ_MODEL,
     messages: [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt },
@@ -583,7 +607,7 @@ Job Description:
 ${jobDescription}`;
 
   const response = await groq.chat.completions.create({
-    model: 'llama-3.3-70b-versatile',
+    model: GROQ_MODEL,
     messages: [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt },

@@ -9,4 +9,8 @@ const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY,
 });
 
+const DEFAULT_MODEL = process.env.GROQ_MODEL || 'groq/compound';
+
 module.exports = groq;
+module.exports.DEFAULT_MODEL = DEFAULT_MODEL;
+

@@ -1,4 +1,4 @@
-﻿import { useForm } from 'react-hook-form';
+import { useForm } from 'react-hook-form';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Mail, Lock, Eye, EyeOff, Loader2 } from 'lucide-react';
@@ -78,6 +78,38 @@ export default function LoginPage() {
         <button type="submit" disabled={isLoading} className="btn-primary w-full">
           {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
           {isLoading ? 'Signing in...' : 'Sign In'}
+        </button>
+
+        <div className="relative my-4">
+          <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-surface-border" /></div>
+          <div className="relative flex justify-center text-xs uppercase"><span className="bg-slate-900 px-2 text-slate-500 font-medium">Or</span></div>
+        </div>
+
+        <button
+          type="button"
+          onClick={async () => {
+            const demoCreds = { email: 'candidate@prepai.com', password: 'Password123!' };
+            let result = await login(demoCreds);
+            if (!result.success) {
+              const registerRes = await useAuthStore.getState().register({
+                name: 'Alex Johnson',
+                email: 'candidate@prepai.com',
+                password: 'Password123!',
+              });
+              if (registerRes.success) {
+                toast.success('Logged in as Demo Candidate! 🚀');
+                navigate('/dashboard');
+                return;
+              }
+            } else {
+              toast.success('Welcome back, Demo Candidate! 🚀');
+              navigate('/dashboard');
+            }
+          }}
+          disabled={isLoading}
+          className="w-full py-3 px-4 bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-semibold rounded-xl transition-all border border-surface-border flex items-center justify-center gap-2"
+        >
+          ⚡ Quick Demo Candidate Login
         </button>
       </form>
 

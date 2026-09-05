@@ -42,17 +42,35 @@ exports.changePassword = async (req, res, next) => {
   res.status(200).json({ success: true, message: 'Password updated successfully.' });
 };
 
+const DSASession = require('../models/DSASession.model');
+const Resume = require('../models/Resume.model');
+
 // ─── GET /api/users/dashboard ─────────────────────────────────────
 exports.getDashboard = async (req, res) => {
   const userId = req.user._id;
 
-  const [totalSessions, completedSessions, recentSessions] = await Promise.all([
+  const [
+    totalAiSessions,
+    completedAiSessions,
+    recentAiSessions,
+    totalDSA,
+    completedDSA,
+    resumeCount,
+    dsaTopicStats
+  ] = await Promise.all([
     Session.countDocuments({ userId }),
     Session.countDocuments({ userId, status: 'completed' }),
     Session.find({ userId, status: 'completed' })
       .sort('-createdAt')
       .limit(5)
       .populate({ path: 'interviewId', select: 'jobTitle company experienceLevel' }),
+    DSASession.countDocuments({ userId }),
+    DSASession.countDocuments({ userId, status: 'completed' }),
+    Resume.countDocuments({ userId }),
+    DSASession.aggregate([
+      { $match: { userId, status: 'completed' } },
+      { $group: { _id: '$topic', avgScore: { $avg: '$overallScore' }, count: { $sum: 1 } } }
+    ])
   ]);
 
   const scoreAgg = await Session.aggregate([
@@ -60,14 +78,30 @@ exports.getDashboard = async (req, res) => {
     { $group: { _id: null, avgScore: { $avg: '$overallScore' }, maxScore: { $max: '$overallScore' } } },
   ]);
 
+  const scoreTrend = await Session.find({ userId, status: 'completed' })
+    .sort('createdAt')
+    .limit(10)
+    .populate({ path: 'interviewId', select: 'jobTitle' })
+    .select('overallScore createdAt interviewId');
+
+  const totalSessions = totalAiSessions + totalDSA;
+  const completedSessions = completedAiSessions + completedDSA;
+  const averageScore = scoreAgg[0]?.avgScore?.toFixed(1) ?? 0;
+  const bestScore = scoreAgg[0]?.maxScore ?? 0;
+
   res.status(200).json({
     success: true,
     data: {
       totalSessions,
       completedSessions,
-      averageScore: scoreAgg[0]?.avgScore?.toFixed(1) ?? 0,
-      bestScore: scoreAgg[0]?.maxScore ?? 0,
-      recentSessions,
+      averageScore,
+      bestScore,
+      totalDSA,
+      completedDSA,
+      resumeCount,
+      recentSessions: recentAiSessions,
+      scoreTrend,
+      dsaTopicStats
     },
   });
 };

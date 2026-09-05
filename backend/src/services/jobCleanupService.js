@@ -51,7 +51,7 @@ const runJobCleanup = async () => {
 
   } catch (error) {
     logger.error(`❌ Job Cleanup Service Error: ${error.message}`);
-    throw error;
+    return { success: false, error: error.message };
   } finally {
     isCleaning = false;
   }
@@ -66,7 +66,7 @@ const initCleanupScheduler = () => {
   // 1. Run once shortly after boot (30 seconds delay)
   setTimeout(() => {
     logger.info('⏰ Triggering initial startup job cleanup run...');
-    runJobCleanup();
+    runJobCleanup().catch((err) => logger.error('Cleanup run error:', err.message));
   }, 30 * 1000);
 
   // 2. Schedule cron to execute daily at midnight (0 0 * * *)

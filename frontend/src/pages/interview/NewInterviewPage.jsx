@@ -4,9 +4,11 @@ import { useForm } from 'react-hook-form';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Briefcase, FileText, Sliders, Sparkles, Code2,
-  Loader2, ChevronRight, ChevronLeft, Check, Cpu, Brain
+  Loader2, ChevronRight, ChevronLeft, Check, Cpu, Brain,
+  Crown, Zap, Star, X, ShieldCheck
 } from 'lucide-react';
 import { interviewAPI, resumeAPI } from '@/services/api';
+import { useAuthStore } from '@/store/authStore';
 import toast from 'react-hot-toast';
 
 const STEPS = ['Mode', 'Job Details', 'Preferences', 'Resume', 'Review'];
@@ -70,8 +72,11 @@ export default function NewInterviewPage() {
   const [isCreating, setIsCreating] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
 
-  const { register, handleSubmit, watch, formState: { errors } } = useForm({
-    defaultValues: { numberOfQuestions: 10 },
+  const { user, updateUser } = useAuthStore();
+  const [showPremiumModal, setShowPremiumModal] = useState(false);
+
+  const { register, handleSubmit, watch, setValue, formState: { errors } } = useForm({
+    defaultValues: { numberOfQuestions: 5 },
   });
 
   const jobTitle       = watch('jobTitle');
@@ -365,9 +370,25 @@ export default function NewInterviewPage() {
                     </div>
                   </div>
                   <div>
-                    <label className="form-label">Questions: <span className="text-brand-400 font-bold">{numberOfQuestions}</span></label>
+                    <div className="flex justify-between items-center">
+                      <label className="form-label mb-0">Questions: <span className="text-brand-400 font-bold">{numberOfQuestions}</span></label>
+                      {!user?.isPremium && (
+                        <span className="text-xs text-amber-400 flex items-center gap-1">
+                          <Crown className="w-3 h-3" /> &gt;5 requires Premium
+                        </span>
+                      )}
+                    </div>
                     <input type="range" min="3" max="20" step="1" className="w-full accent-brand-500 mt-2"
-                      {...register('numberOfQuestions', { valueAsNumber: true })} />
+                      value={numberOfQuestions}
+                      onChange={(e) => {
+                        const val = Number(e.target.value);
+                        if (val > 5 && !user?.isPremium) {
+                          setShowPremiumModal(true);
+                          setValue('numberOfQuestions', 5);
+                        } else {
+                          setValue('numberOfQuestions', val);
+                        }
+                      }} />
                     <div className="flex justify-between text-xs text-slate-500 mt-1"><span>3</span><span>20</span></div>
                   </div>
                 </motion.div>
@@ -450,6 +471,81 @@ export default function NewInterviewPage() {
             </div>
           </form>
         </>
+      )}
+      {/* ── Premium Upgrade Modal ─────────────────────────────────────── */}
+      {showPremiumModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            className="relative w-full max-w-md bg-slate-900 border border-amber-500/30 rounded-3xl p-6 md:p-8 shadow-2xl overflow-hidden"
+          >
+            {/* Background Glow */}
+            <div className="absolute top-0 right-0 w-64 h-64 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
+
+            <button
+              onClick={() => setShowPremiumModal(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-white transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="text-center space-y-4">
+              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 mx-auto flex items-center justify-center shadow-lg shadow-amber-500/20">
+                <Crown className="w-8 h-8 text-white" />
+              </div>
+
+              <div>
+                <span className="badge badge-warning text-xs mb-2">PrepAI Pro Feature</span>
+                <h3 className="text-2xl font-display font-bold text-white">Unlock &gt;5 Questions</h3>
+                <p className="text-slate-400 text-sm mt-2 leading-relaxed">
+                  Selecting more than 5 questions per session requires a PrepAI Premium subscription.
+                </p>
+              </div>
+
+              <div className="card p-4 bg-slate-950/60 border-slate-800 space-y-2 text-left text-xs text-slate-300">
+                <div className="flex items-center gap-2">
+                  <Check className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                  <span>Generate up to 20 AI questions per interview</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Check className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                  <span>Unlimited DSA Coding & Neetcode 150 practice</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Check className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                  <span>Real-time voice & video facial presence scoring</span>
+                </div>
+              </div>
+
+              <div className="space-y-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    updateUser({ isPremium: true });
+                    setShowPremiumModal(false);
+                    setValue('numberOfQuestions', 10);
+                    toast.success('👑 Premium Activated! You can now select up to 20 questions.');
+                  }}
+                  className="w-full py-3.5 px-4 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white font-bold rounded-xl transition-all shadow-glow flex items-center justify-center gap-2"
+                >
+                  <Zap className="w-4 h-4" /> Upgrade to Pro ($19/mo)
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowPremiumModal(false);
+                    setValue('numberOfQuestions', 5);
+                  }}
+                  className="w-full py-2.5 px-4 bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium text-xs rounded-xl transition-colors"
+                >
+                  Keep 5 Questions (Free)
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        </div>
       )}
     </div>
   );

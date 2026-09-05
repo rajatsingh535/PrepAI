@@ -24,6 +24,7 @@ const userRoutes      = require('./routes/user.routes');
 const resumeRoutes    = require('./routes/resume.routes');
 const interviewRoutes = require('./routes/interview.routes');
 const sessionRoutes   = require('./routes/session.routes');
+const dsaRoutes       = require('./routes/dsa.routes');
 const jobsRoutes      = require('./routes/jobs.routes');
 const adminRoutes     = require('./routes/admin.routes');
 
@@ -103,6 +104,7 @@ app.use('/api/users',      userRoutes);
 app.use('/api/resumes',    resumeRoutes);
 app.use('/api/interviews', interviewRoutes);
 app.use('/api/sessions',   sessionRoutes);
+app.use('/api/dsa',        dsaRoutes);
 app.use('/api/jobs',       jobsRoutes);
 app.use('/api/admin',      adminRoutes);
 

@@ -142,6 +142,8 @@ const getCategories = async (req, res) => {
   res.status(200).json(formatCategories(categories));
 };
 
+const { searchGoogleJobs, buildQueryFromSkills, matchJobsWithSkills } = require('../services/serpapi.service');
+
 const getRecommendedJobs = async (req, res) => {
   const userId = req.user._id;
 
@@ -151,7 +153,7 @@ const getRecommendedJobs = async (req, res) => {
     resume = await Resume.findOne({ userId }).sort({ updatedAt: -1 }).lean();
   }
 
-  if (!resume || !resume.parsedData || !Array.isArray(resume.parsedData.skills)) {
+  if (!resume || !resume.parsedData || !Array.isArray(resume.parsedData.skills) || resume.parsedData.skills.length === 0) {
     return res.status(200).json({
       success: true,
       message: 'Please upload and parse your resume to get personalized recommendations.',
@@ -161,8 +163,25 @@ const getRecommendedJobs = async (req, res) => {
 
   const userSkills = resume.parsedData.skills;
 
-  // 2. Query matching jobs matching >= 60%
-  const recommendedJobs = await matchUserToJobs(userSkills);
+  // 2. Query matching jobs from MongoDB
+  let recommendedJobs = await matchUserToJobs(userSkills);
+
+  // 3. Fallback/Augment with live Google Jobs via SerpAPI
+  if (recommendedJobs.length < 5) {
+    const serpQuery = buildQueryFromSkills(userSkills);
+    const serpResult = await searchGoogleJobs(serpQuery, 'India');
+    if (serpResult.jobs && serpResult.jobs.length > 0) {
+      const serpMatched = matchJobsWithSkills(serpResult.jobs, userSkills);
+      // Combine and remove duplicate job titles
+      const existingTitles = new Set(recommendedJobs.map(j => j.title.toLowerCase()));
+      for (const serpJob of serpMatched) {
+        if (!existingTitles.has(serpJob.title.toLowerCase())) {
+          recommendedJobs.push(serpJob);
+          existingTitles.add(serpJob.title.toLowerCase());
+        }
+      }
+    }
+  }
 
   res.status(200).json({
     success: true,
