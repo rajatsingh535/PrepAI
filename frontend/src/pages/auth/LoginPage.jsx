@@ -87,24 +87,10 @@ export default function LoginPage() {
 
         <button
           type="button"
-          onClick={async () => {
-            const demoCreds = { email: 'candidate@prepai.com', password: 'Password123!' };
-            let result = await login(demoCreds);
-            if (!result.success) {
-              const registerRes = await useAuthStore.getState().register({
-                name: 'Alex Johnson',
-                email: 'candidate@prepai.com',
-                password: 'Password123!',
-              });
-              if (registerRes.success) {
-                toast.success('Logged in as Demo Candidate! 🚀');
-                navigate('/dashboard');
-                return;
-              }
-            } else {
-              toast.success('Welcome back, Demo Candidate! 🚀');
-              navigate('/dashboard');
-            }
+          onClick={() => {
+            useAuthStore.getState().loginAsDemoCandidate();
+            toast.success('Logged in as Candidate! 🚀');
+            navigate('/dashboard');
           }}
           disabled={isLoading}
           className="w-full py-3 px-4 bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-semibold rounded-xl transition-all border border-surface-border flex items-center justify-center gap-2"

@@ -28,7 +28,7 @@ export const useAuthStore = create(
           return { success: true };
         } catch (err) {
           set({ isLoading: false });
-          return { success: false, message: err.response?.data?.message || 'Login failed' };
+          return { success: false, message: err.response?.data?.message || err.message || 'Login failed' };
         }
       },
 
@@ -46,8 +46,28 @@ export const useAuthStore = create(
           return { success: true };
         } catch (err) {
           set({ isLoading: false });
-          return { success: false, message: err.response?.data?.message || 'Registration failed' };
+          return { success: false, message: err.response?.data?.message || err.message || 'Registration failed' };
         }
+      },
+
+      loginAsDemoCandidate: () => {
+        const demoUser = {
+          _id: 'demo-candidate-123',
+          name: 'Alex Johnson',
+          email: 'candidate@prepai.com',
+          role: 'candidate',
+          isPremium: true,
+          totalSessions: 5,
+        };
+        const mockToken = 'demo_access_token_prepai_' + Date.now();
+        set({
+          user: demoUser,
+          accessToken: mockToken,
+          refreshToken: 'demo_refresh_token',
+          isAuthenticated: true,
+          isLoading: false,
+        });
+        return { success: true };
       },
 
       logout: () => {
@@ -56,6 +76,7 @@ export const useAuthStore = create(
           accessToken: null,
           refreshToken: null,
           isAuthenticated: false,
+          isLoading: false,
         });
       },
 
@@ -74,3 +95,10 @@ export const useAuthStore = create(
     }
   )
 );
+
+// Subscribe to global auth:logout events dispatched by axios interceptor
+if (typeof window !== 'undefined') {
+  window.addEventListener('auth:logout', () => {
+    useAuthStore.getState().logout();
+  });
+}

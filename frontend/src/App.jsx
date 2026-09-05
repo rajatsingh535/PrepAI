@@ -44,9 +44,17 @@ import RecommendedJobs     from '@/pages/RecommendedJobs';
 import PricingPage         from '@/pages/pricing/PricingPage';
 
 const GuestRoute = ({ children }) => {
-  const { isAuthenticated } = useAuth();
-  if (!isAuthenticated) return children;
+  const { isAuthenticated, user } = useAuth();
+  if (!isAuthenticated && !user) return children;
   return <Navigate to="/dashboard" replace />;
+};
+
+const ProtectedRoute = ({ children }) => {
+  const { isAuthenticated, user } = useAuth();
+  if (!isAuthenticated && !user) {
+    return <Navigate to="/login" replace />;
+  }
+  return children;
 };
 
 const AdminRoute = ({ children }) => {
@@ -116,7 +124,7 @@ export default function App() {
         <Route path="/admin/logs" element={<AdminPermissionRoute permission="view:logs"><AdminLogsPage /></AdminPermissionRoute>} />
       </Route>
 
-      <Route element={<DashboardLayout />}>
+      <Route element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>}>
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/interviews" element={<InterviewListPage />} />
         <Route path="/interviews/new" element={<NewInterviewPage />} />
