@@ -1,10 +1,27 @@
 const axios = require('axios');
 const groq = require('../config/groq');
-const GROQ_MODEL = groq.DEFAULT_MODEL || 'groq/compound';
+const GROQ_MODEL = groq.DEFAULT_MODEL || 'openai/gpt-oss-120b';
 const DSASession = require('../models/DSASession.model');
 const User = require('../models/User.model');
 const AppError = require('../utils/AppError');
 const logger = require('../config/logger');
+
+const parseAIJSON = (content) => {
+  if (!content) return {};
+  let cleaned = content.trim();
+  cleaned = cleaned.replace(/```json\s*/gi, '').replace(/```\s*/gi, '');
+  const match = cleaned.match(/({[\s\S]*}|\[[\s\S]*\])/);
+  if (match) {
+    try {
+      return JSON.parse(match[0]);
+    } catch {}
+  }
+  try {
+    return JSON.parse(cleaned);
+  } catch {
+    return {};
+  }
+};
 
 // LeetCode topic slug mappings for Hosted API https://leetcode-api-pied.vercel.app/problem/{slug}
 const LEETCODE_SLUGS = {
@@ -192,7 +209,7 @@ Return strictly a JSON object with a "problems" array. Each problem MUST include
     });
 
     const content = response.choices[0]?.message?.content;
-    let parsed = JSON.parse(content || '{}');
+    let parsed = parseAIJSON(content);
     const problems = (parsed.problems || []).slice(0, numQuestions);
 
     res.status(200).json({
@@ -294,7 +311,7 @@ Evaluate the candidate rigorously and return strictly JSON in this format:
     });
 
     const content = response.choices[0]?.message?.content;
-    const evaluation = JSON.parse(content || '{}');
+    const evaluation = parseAIJSON(content);
 
     res.status(200).json({
       success: true,
@@ -409,7 +426,7 @@ Return strictly a JSON object:
     });
 
     const content = response.choices[0]?.message?.content;
-    const parsed = JSON.parse(content || '{}');
+    const parsed = parseAIJSON(content);
 
     const results = Array.isArray(parsed.results) ? parsed.results : testCases.map((tc) => ({
       ...tc,

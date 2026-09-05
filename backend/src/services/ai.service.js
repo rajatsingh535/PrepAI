@@ -1,8 +1,25 @@
 const groq = require('../config/groq');
-const GROQ_MODEL = groq.DEFAULT_MODEL || 'groq/compound';
+const GROQ_MODEL = groq.DEFAULT_MODEL || 'openai/gpt-oss-120b';
 const { extractContextViaRAG, buildSemanticChunks, createAndStoreEmbeddings, retrieveContextForTopic } = require('./rag.service');
 const { optimizeQuery } = require('./optimizer.service');
 const SystemPrompt = require('../models/SystemPrompt.model');
+
+const parseAIJSON = (content) => {
+  if (!content) return {};
+  let cleaned = content.trim();
+  cleaned = cleaned.replace(/```json\s*/gi, '').replace(/```\s*/gi, '');
+  const match = cleaned.match(/({[\s\S]*}|\[[\s\S]*\])/);
+  if (match) {
+    try {
+      return JSON.parse(match[0]);
+    } catch {}
+  }
+  try {
+    return JSON.parse(cleaned);
+  } catch {
+    return {};
+  }
+};
 
 const getActivePrompt = async (category, defaultVal) => {
   try {
@@ -103,12 +120,7 @@ Return structured JSON exactly in this format:
   const content = response.choices[0]?.message?.content;
   if (!content) throw new Error('No response from AI model.');
 
-  let parsed = {};
-  try {
-    parsed = JSON.parse(content);
-  } catch {
-    parsed = {};
-  }
+  let parsed = parseAIJSON(content);
 
   let technicalQs = Array.isArray(parsed.technical) ? parsed.technical : (Array.isArray(parsed.technicalQuestions) ? parsed.technicalQuestions : []);
   let behavioralQs = Array.isArray(parsed.behavioral) ? parsed.behavioral : (Array.isArray(parsed.behavioralQuestions) ? parsed.behavioralQuestions : []);
@@ -205,7 +217,7 @@ Return valid JSON exactly in this format:
   });
 
   const content = response.choices[0]?.message?.content;
-  return JSON.parse(content || '{}');
+  return parseAIJSON(content);
 };
 
 /**
@@ -253,7 +265,7 @@ Respond with valid JSON exactly in this format:
   });
 
   const content = response.choices[0]?.message?.content;
-  return JSON.parse(content || '{}');
+  return parseAIJSON(content);
 };
 
 /**
