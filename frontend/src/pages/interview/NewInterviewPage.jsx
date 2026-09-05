@@ -68,7 +68,7 @@ export default function NewInterviewPage() {
   const [dsaTopic, setDsaTopic] = useState('arrays');
   const [dsaDifficulty, setDsaDifficulty] = useState('medium');
   const [dsaLang, setDsaLang] = useState('python');
-  const [dsaCount, setDsaCount] = useState(3);
+  const [dsaCount, setDsaCount] = useState(1);
   const [isCreating, setIsCreating] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
 
@@ -264,13 +264,28 @@ export default function NewInterviewPage() {
 
           {/* Problem count */}
           <div className="card p-6">
-            <label className="form-label">
-              Number of Problems: <span className="text-emerald-400 font-bold">{dsaCount}</span>
-            </label>
-            <input type="range" min="1" max="5" step="1"
-              value={dsaCount} onChange={(e) => setDsaCount(Number(e.target.value))}
+            <div className="flex justify-between items-center">
+              <label className="form-label mb-0">
+                Number of Problems: <span className="text-emerald-400 font-bold">{dsaCount}</span>
+              </label>
+              {!user?.isPremium && (
+                <span className="text-xs text-amber-400 flex items-center gap-1">
+                  <Crown className="w-3 h-3" /> &gt;5 requires Premium
+                </span>
+              )}
+            </div>
+            <input type="range" min="1" max="10" step="1"
+              value={dsaCount} onChange={(e) => {
+                const val = Number(e.target.value);
+                if (val > 5 && !user?.isPremium) {
+                  setShowPremiumModal(true);
+                  setDsaCount(5);
+                } else {
+                  setDsaCount(val);
+                }
+              }}
               className="w-full accent-emerald-500 mt-2" />
-            <div className="flex justify-between text-xs text-slate-500 mt-1"><span>1</span><span>5</span></div>
+            <div className="flex justify-between text-xs text-slate-500 mt-1"><span>1</span><span>10</span></div>
           </div>
 
           <motion.button

@@ -211,10 +211,18 @@ Return valid JSON exactly in this format:
 /**
  * Generate overall session feedback
  */
-const generateOverallFeedback = async ({ jobTitle, answers }) => {
+const generateOverallFeedback = async ({ jobTitle, answers, videoMetrics }) => {
   const summary = answers
     .map((a, i) => `Q${i + 1}: ${a.questionText}\nScore: ${a.aiScore}/10\nAnswer: ${a.answerText?.slice(0, 200)}`)
     .join('\n\n');
+
+  const videoSummary = videoMetrics ? `
+Candidate Live Webcam & Web Audio Evaluation:
+- Eye Contact Score: ${videoMetrics.eyeContact ?? 85}%
+- Facial Attention / Focus: ${videoMetrics.attention ?? 88}%
+- Posture: ${videoMetrics.posture ?? 'Good'}
+- Audio Level / Delivery: ${videoMetrics.audioVolume ?? 50}%
+` : 'Webcam and mic metrics: Standard presentation';
 
   const defaultPrompt = `You are a senior interviewer providing a final interview report.
 Be professional and concise.
@@ -223,7 +231,9 @@ Job Title: \${jobTitle}
 Interview Summary:
 \${summary}
 
-Respond with valid JSON exacty in this format:
+\${videoSummary}
+
+Respond with valid JSON exactly in this format:
 {
   "overallScore": <number 1-100>,
   "strengths": ["<point 1>", "<point 2>"],
@@ -232,7 +242,7 @@ Respond with valid JSON exacty in this format:
 }`;
 
   const rawTemplate = await getActivePrompt('feedback_report', defaultPrompt);
-  const prompt      = formatPrompt(rawTemplate, { jobTitle, summary });
+  const prompt      = formatPrompt(rawTemplate, { jobTitle, summary, videoSummary });
 
   const response = await groq.chat.completions.create({
     model: GROQ_MODEL,

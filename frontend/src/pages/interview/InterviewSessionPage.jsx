@@ -346,7 +346,7 @@ export default function InterviewSessionPage() {
     await saveAnswer(false);
     setCompleting(true);
     try {
-      await sessionAPI.complete(session._id);
+      await sessionAPI.complete(session._id, { videoMetrics: facialMetrics });
       toast.success('Session completed! Loading results...');
       navigate(`/sessions/${session._id}/results`);
     } catch (err) {

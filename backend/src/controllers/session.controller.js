@@ -122,6 +122,7 @@ exports.completeSession = async (req, res, next) => {
     overallData = await generateOverallFeedback({
       jobTitle: interview.jobTitle,
       answers: session.answers,
+      videoMetrics: req.body.videoMetrics,
     });
   } catch {
     overallData = {};

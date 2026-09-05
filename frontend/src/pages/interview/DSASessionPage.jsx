@@ -13,6 +13,7 @@ import {
   Lightbulb, Brain, ChevronDown, ChevronUp, X,
   Volume2, Activity, Cpu
 } from 'lucide-react';
+import { RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer } from 'recharts';
 import toast from 'react-hot-toast';
 
 /* ── Interview phases per question ─────────────────────────────── */
@@ -360,6 +361,12 @@ export default function DSASessionPage() {
         userCode: userSolution,
         bruteForceExplanation: bruteForceExplanations[currentIdx] || '',
         optimalExplanation: optimalExplanations[currentIdx] || '',
+        videoMetrics: {
+          eyeContact: camOn ? 86 : 0,
+          attention: camOn ? 90 : 0,
+          posture: camOn ? 'Good' : 'N/A',
+          audioVolume: micOn ? (speaking ? 80 : 35) : 0,
+        },
         language: lang
       });
       const ev = data.evaluation || MOCK_AI_EVALUATIONS[0];

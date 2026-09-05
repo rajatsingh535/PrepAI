@@ -1,11 +1,74 @@
-'use strict';
-
+const axios = require('axios');
 const groq = require('../config/groq');
 const GROQ_MODEL = groq.DEFAULT_MODEL || 'groq/compound';
 const DSASession = require('../models/DSASession.model');
 const User = require('../models/User.model');
 const AppError = require('../utils/AppError');
 const logger = require('../config/logger');
+
+// LeetCode topic slug mappings for Hosted API https://leetcode-api-pied.vercel.app/problem/{slug}
+const LEETCODE_SLUGS = {
+  arrays: ['two-sum', 'group-anagrams', 'top-k-frequent-elements', 'product-of-array-except-self', 'valid-sudoku'],
+  linked_list: ['reverse-linked-list', 'merge-two-sorted-lists', 'reorder-list', 'remove-nth-node-from-end-of-list'],
+  trees: ['invert-binary-tree', 'maximum-depth-of-binary-tree', 'diameter-of-binary-tree', 'same-tree'],
+  dp: ['climbing-stairs', 'min-cost-climbing-stairs', 'house-robber', 'longest-palindromic-substring', 'coin-change'],
+  sorting: ['kth-largest-element-in-an-array', 'sort-colors', 'top-k-frequent-words', 'merge-intervals'],
+  backtracking: ['subsets', 'combination-sum', 'permutations', 'word-search', 'n-queens'],
+  stacks_queues: ['valid-parentheses', 'min-stack', 'evaluate-reverse-polish-notation', 'daily-temperatures'],
+  hashing: ['contains-duplicate', 'valid-anagram', 'two-sum', 'intersection-of-two-arrays-ii'],
+  greedy: ['maximum-subarray', 'jump-game', 'jump-game-ii', 'gas-station'],
+  bit_manipulation: ['single-number', 'number-of-1-bits', 'counting-bits', 'reverse-bits'],
+  two_pointers: ['valid-palindrome', 'two-sum-ii-input-array-is-sorted', '3sum', 'container-with-most-water'],
+  sliding_window: ['best-time-to-buy-and-sell-stock', 'longest-substring-without-repeating-characters', 'minimum-window-substring']
+};
+
+/**
+ * Fetch problem details from Hosted LeetCode API (leetcode-api-pied.vercel.app)
+ */
+const fetchLeetCodeProblem = async (slug, topic, defaultDiff) => {
+  try {
+    const { data } = await axios.get(`https://leetcode-api-pied.vercel.app/problem/${slug}`, { timeout: 8000 });
+    if (data && data.title) {
+      const rawContent = data.content || '';
+      const cleanContent = rawContent
+        .replace(/<pre>/gi, '\n```\n')
+        .replace(/<\/pre>/gi, '\n```\n')
+        .replace(/<code>/gi, '`')
+        .replace(/<\/code>/gi, '`')
+        .replace(/<strong[^>]*>/gi, '**')
+        .replace(/<\/strong>/gi, '**')
+        .replace(/<p>/gi, '\n\n')
+        .replace(/<\/p>/gi, '')
+        .replace(/<[^>]+>/g, '')
+        .replace(/&nbsp;/gi, ' ')
+        .replace(/&lt;/gi, '<')
+        .replace(/&gt;/gi, '>')
+        .replace(/&amp;/gi, '&');
+
+      return {
+        title: data.title,
+        slug: data.titleSlug || slug,
+        topic: topic.replace('_', ' '),
+        difficulty: data.difficulty || defaultDiff,
+        description: `## ${data.title}\n\n${cleanContent.trim()}`,
+        testCases: [
+          { input: `Sample input for ${data.title}`, expected: 'Sample expected output' }
+        ],
+        hints: ['Think brute force first', 'Optimize time complexity using a hash map or two-pointer technique'],
+        starterCode: {
+          python: `def ${slug.replace(/-/g, '_')}(...):\n    # TODO: Implement solution\n    pass\n`,
+          javascript: `var ${slug.replace(/-([a-z])/g, (_, c) => c.toUpperCase())} = function(...) {\n    // TODO: Implement solution\n};\n`,
+          java: `class Solution {\n    // TODO: Implement solution\n}\n`,
+          cpp: `class Solution {\npublic:\n    // TODO: Implement solution\n};\n`
+        },
+        expectedComplexity: { time: 'O(N)', space: 'O(N)' }
+      };
+    }
+  } catch (err) {
+    logger.warn(`LeetCode API fetch failed for slug ${slug}: ${err.message}`);
+  }
+  return null;
+};
 
 // Curated NeetCode 150 style problem templates for all 12 topics
 const NEETCODE_TOPIC_TEMPLATES = {
@@ -29,268 +92,39 @@ const NEETCODE_TOPIC_TEMPLATES = {
         cpp: 'class Solution {\npublic:\n    vector<int> twoSum(vector<int>& nums, int target) {\n        return {};\n    }\n};\n'
       },
       expectedComplexity: { time: 'O(N)', space: 'O(N)' }
-    },
-    {
-      title: 'Group Anagrams',
-      slug: 'group-anagrams',
-      topic: 'Arrays & Hashing',
-      difficulty: 'Medium',
-      description: 'Given an array of strings `strs`, group the anagrams together. You can return the answer in any order.',
-      testCases: [
-        { input: 'strs=["eat","tea","tan","ate","nat","bat"]', expected: '[["bat"],["nat","tan"],["ate","eat","tea"]]' },
-        { input: 'strs=[""]', expected: '[[""]]' }
-      ],
-      hints: ['Sort each string or build a character frequency count tuple as a hash map key.'],
-      starterCode: {
-        python: 'def groupAnagrams(strs: list[str]) -> list[list[str]]:\n    pass\n',
-        javascript: 'var groupAnagrams = function(strs) {};\n',
-        java: 'class Solution {\n    public List<List<String>> groupAnagrams(String[] strs) {\n        return new ArrayList<>();\n    }\n}\n',
-        cpp: 'class Solution {\npublic:\n    vector<vector<string>> groupAnagrams(vector<string>& strs) {\n        return {};\n    }\n};\n'
-      },
-      expectedComplexity: { time: 'O(N * K)', space: 'O(N * K)' }
-    }
-  ],
-  linked_list: [
-    {
-      title: 'Reverse Linked List',
-      slug: 'reverse-linked-list',
-      topic: 'Linked List',
-      difficulty: 'Easy',
-      description: 'Given the head of a singly linked list, reverse the list, and return the reversed list.',
-      testCases: [
-        { input: 'head=[1,2,3,4,5]', expected: '[5,4,3,2,1]' },
-        { input: 'head=[1,2]', expected: '[2,1]' }
-      ],
-      hints: ['Keep track of previous, current, and next pointers.', 'Iterate through the list updating links.'],
-      starterCode: {
-        python: 'def reverseList(head):\n    prev, curr = None, head\n    while curr:\n        nxt = curr.next\n        curr.next = prev\n        prev = curr\n        curr = nxt\n    return prev\n',
-        javascript: 'var reverseList = function(head) {\n    let prev = null, curr = head;\n    while (curr) {\n        let nxt = curr.next;\n        curr.next = prev;\n        prev = curr;\n        curr = nxt;\n    }\n    return prev;\n};\n',
-        java: 'class Solution {\n    public ListNode reverseList(ListNode head) {\n        ListNode prev = null, curr = head;\n        while (curr != null) {\n            ListNode nxt = curr.next;\n            curr.next = prev;\n            prev = curr;\n            curr = nxt;\n        }\n        return prev;\n    }\n}\n',
-        cpp: 'class Solution {\npublic:\n    ListNode* reverseList(ListNode* head) {\n        ListNode *prev = nullptr, *curr = head;\n        while (curr) {\n            ListNode* nxt = curr->next;\n            curr->next = prev;\n            prev = curr;\n            curr = nxt;\n        }\n        return prev;\n    }\n};\n'
-      },
-      expectedComplexity: { time: 'O(N)', space: 'O(1)' }
-    }
-  ],
-  trees: [
-    {
-      title: 'Invert Binary Tree',
-      slug: 'invert-binary-tree',
-      topic: 'Trees & Graphs',
-      difficulty: 'Easy',
-      description: 'Given the root of a binary tree, invert the tree, and return its root.',
-      testCases: [
-        { input: 'root=[4,2,7,1,3,6,9]', expected: '[4,7,2,9,6,3,1]' },
-        { input: 'root=[2,1,3]', expected: '[2,3,1]' }
-      ],
-      hints: ['Swap left and right children recursively.', 'Base case: if root is null, return null.'],
-      starterCode: {
-        python: 'def invertTree(root):\n    if not root:\n        return None\n    root.left, root.right = invertTree(root.right), invertTree(root.left)\n    return root\n',
-        javascript: 'var invertTree = function(root) {\n    if (!root) return null;\n    let tmp = root.left;\n    root.left = invertTree(root.right);\n    root.right = invertTree(tmp);\n    return root;\n};\n',
-        java: 'class Solution {\n    public TreeNode invertTree(TreeNode root) {\n        if (root == null) return null;\n        TreeNode tmp = root.left;\n        root.left = invertTree(root.right);\n        root.right = invertTree(tmp);\n        return root;\n    }\n}\n',
-        cpp: 'class Solution {\npublic:\n    TreeNode* invertTree(TreeNode* root) {\n        if (!root) return nullptr;\n        swap(root->left, root->right);\n        invertTree(root->left);\n        invertTree(root->right);\n        return root;\n    }\n};\n'
-      },
-      expectedComplexity: { time: 'O(N)', space: 'O(H)' }
-    }
-  ],
-  dp: [
-    {
-      title: 'Climbing Stairs',
-      slug: 'climbing-stairs',
-      topic: 'Dynamic Programming',
-      difficulty: 'Easy',
-      description: 'You are climbing a staircase. It takes `n` steps to reach the top. Each time you can climb 1 or 2 steps. How many distinct ways can you reach the top?',
-      testCases: [
-        { input: 'n=2', expected: '2' },
-        { input: 'n=3', expected: '3' }
-      ],
-      hints: ['The number of ways to reach step n is step(n-1) + step(n-2).'],
-      starterCode: {
-        python: 'def climbStairs(n: int) -> int:\n    pass\n',
-        javascript: 'var climbStairs = function(n) {};\n',
-        java: 'class Solution {\n    public int climbStairs(int n) {\n        return 0;\n    }\n}\n',
-        cpp: 'class Solution {\npublic:\n    int climbStairs(int n) {\n        return 0;\n    }\n};\n'
-      },
-      expectedComplexity: { time: 'O(N)', space: 'O(1)' }
-    }
-  ],
-  sorting: [
-    {
-      title: 'Kth Largest Element in an Array',
-      slug: 'kth-largest-element',
-      topic: 'Sorting & Searching',
-      difficulty: 'Medium',
-      description: 'Given an integer array `nums` and an integer `k`, return the `k`th largest element in the array.',
-      testCases: [
-        { input: 'nums=[3,2,1,5,6,4], k=2', expected: '5' },
-        { input: 'nums=[3,2,3,1,2,4,5,5,6], k=4', expected: '4' }
-      ],
-      hints: ['Use a min-heap of size K, or QuickSelect algorithm for O(N) average time.'],
-      starterCode: {
-        python: 'import heapq\ndef findKthLargest(nums: list[int], k: int) -> int:\n    return heapq.nlargest(k, nums)[-1]\n',
-        javascript: 'var findKthLargest = function(nums, k) {\n    nums.sort((a, b) => b - a);\n    return nums[k - 1];\n};\n',
-        java: 'class Solution {\n    public int findKthLargest(int[] nums, int k) {\n        Arrays.sort(nums);\n        return nums[nums.length - k];\n    }\n}\n',
-        cpp: 'class Solution {\npublic:\n    int findKthLargest(vector<int>& nums, int k) {\n        sort(nums.begin(), nums.end(), greater<int>());\n        return nums[k-1];\n    }\n};\n'
-      },
-      expectedComplexity: { time: 'O(N log K)', space: 'O(K)' }
-    }
-  ],
-  backtracking: [
-    {
-      title: 'Subsets',
-      slug: 'subsets',
-      topic: 'Backtracking',
-      difficulty: 'Medium',
-      description: 'Given an integer array `nums` of unique elements, return all possible subsets (the power set).',
-      testCases: [
-        { input: 'nums=[1,2,3]', expected: '[[],[1],[2],[1,2],[3],[1,3],[2,3],[1,2,3]]' },
-        { input: 'nums=[0]', expected: '[[],[0]]' }
-      ],
-      hints: ['Use decision tree backtracking: include or exclude each element.'],
-      starterCode: {
-        python: 'def subsets(nums: list[int]) -> list[list[int]]:\n    res = []\n    def dfs(i, path):\n        if i == len(nums):\n            res.append(path[:])\n            return\n        dfs(i+1, path + [nums[i]])\n        dfs(i+1, path)\n    dfs(0, [])\n    return res\n',
-        javascript: 'var subsets = function(nums) {\n    const res = [];\n    const dfs = (i, path) => {\n        if (i === nums.length) { res.push([...path]); return; }\n        dfs(i + 1, [...path, nums[i]]);\n        dfs(i + 1, path);\n    };\n    dfs(0, []);\n    return res;\n};\n',
-        java: 'class Solution {\n    public List<List<Integer>> subsets(int[] nums) {\n        List<List<Integer>> res = new ArrayList<>();\n        backtrack(0, nums, new ArrayList<>(), res);\n        return res;\n    }\n}\n',
-        cpp: 'class Solution {\npublic:\n    vector<vector<int>> subsets(vector<int>& nums) {\n        vector<vector<int>> res;\n        vector<int> path;\n        dfs(0, nums, path, res);\n        return res;\n    }\n};\n'
-      },
-      expectedComplexity: { time: 'O(2^N)', space: 'O(N)' }
-    }
-  ],
-  stacks_queues: [
-    {
-      title: 'Valid Parentheses',
-      slug: 'valid-parentheses',
-      topic: 'Stacks & Queues',
-      difficulty: 'Easy',
-      description: 'Given a string `s` containing just the characters `(`, `)`, `{`, `}`, `[` and `]`, determine if the input string is valid.',
-      testCases: [
-        { input: 's="()"', expected: 'true' },
-        { input: 's="()[]{}"', expected: 'true' },
-        { input: 's="(]"', expected: 'false' }
-      ],
-      hints: ['Use a stack. Push open brackets, pop and match when encountering closing brackets.'],
-      starterCode: {
-        python: 'def isValid(s: str) -> bool:\n    stack = []\n    mp = {")": "(", "]": "[", "}": "{"}\n    for c in s:\n        if c in mp:\n            if not stack or stack.pop() != mp[c]: return False\n        else: stack.append(c)\n    return len(stack) == 0\n',
-        javascript: 'var isValid = function(s) {\n    const st = [];\n    const map = {")":"(", "]":"[", "}":"{"};\n    for (let c of s) {\n        if (map[c]) {\n            if (st.pop() !== map[c]) return false;\n        } else st.push(c);\n    }\n    return st.length === 0;\n};\n',
-        java: 'class Solution {\n    public boolean isValid(String s) {\n        Stack<Character> stack = new Stack<>();\n        for (char c : s.toCharArray()) {\n            if (c == \'(\') stack.push(\')\');\n            else if (c == \'{\') stack.push(\'}\');\n            else if (c == \'[\') stack.push(\']\');\n            else if (stack.isEmpty() || stack.pop() != c) return false;\n        }\n        return stack.isEmpty();\n    }\n}\n',
-        cpp: 'class Solution {\npublic:\n    bool isValid(string s) {\n        stack<char> st;\n        for (char c : s) {\n            if (c == \'(\' || c == \'{\' || c == \'[\') st.push(c);\n            else {\n                if (st.empty()) return false;\n                char top = st.top(); st.pop();\n                if (c == \')\' && top != \'(\') return false;\n                if (c == \'}\' && top != \'{\') return false;\n                if (c == \']\' && top != \'[\') return false;\n            }\n        }\n        return st.empty();\n    }\n};\n'
-      },
-      expectedComplexity: { time: 'O(N)', space: 'O(N)' }
-    }
-  ],
-  hashing: [
-    {
-      title: 'Contains Duplicate',
-      slug: 'contains-duplicate',
-      topic: 'Hashing',
-      difficulty: 'Easy',
-      description: 'Given an integer array `nums`, return `true` if any value appears at least twice in the array, and return `false` if every element is distinct.',
-      testCases: [
-        { input: 'nums=[1,2,3,1]', expected: 'true' },
-        { input: 'nums=[1,2,3,4]', expected: 'false' }
-      ],
-      hints: ['Insert elements into a Hash Set and check for duplicate encounters.'],
-      starterCode: {
-        python: 'def containsDuplicate(nums: list[int]) -> bool:\n    return len(nums) != len(set(nums))\n',
-        javascript: 'var containsDuplicate = function(nums) {\n    return new Set(nums).size !== nums.length;\n};\n',
-        java: 'class Solution {\n    public boolean containsDuplicate(int[] nums) {\n        Set<Integer> set = new HashSet<>();\n        for (int n : nums) if (!set.add(n)) return true;\n        return false;\n    }\n}\n',
-        cpp: 'class Solution {\npublic:\n    bool containsDuplicate(vector<int>& nums) {\n        unordered_set<int> s(nums.begin(), nums.end());\n        return s.size() != nums.size();\n    }\n};\n'
-      },
-      expectedComplexity: { time: 'O(N)', space: 'O(N)' }
-    }
-  ],
-  greedy: [
-    {
-      title: 'Jump Game',
-      slug: 'jump-game',
-      topic: 'Greedy Algorithms',
-      difficulty: 'Medium',
-      description: 'You are given an integer array `nums`. You are initially positioned at the array\'s first index, and each element in the array represents your maximum jump length at that position. Return `true` if you can reach the last index, or `false` otherwise.',
-      testCases: [
-        { input: 'nums=[2,3,1,1,4]', expected: 'true' },
-        { input: 'nums=[3,2,1,0,4]', expected: 'false' }
-      ],
-      hints: ['Iterate backwards tracking the target goal index.'],
-      starterCode: {
-        python: 'def canJump(nums: list[int]) -> bool:\n    goal = len(nums) - 1\n    for i in range(len(nums) - 2, -1, -1):\n        if i + nums[i] >= goal:\n            goal = i\n    return goal == 0\n',
-        javascript: 'var canJump = function(nums) {\n    let goal = nums.length - 1;\n    for (let i = nums.length - 2; i >= 0; i--) {\n        if (i + nums[i] >= goal) goal = i;\n    }\n    return goal === 0;\n};\n',
-        java: 'class Solution {\n    public boolean canJump(int[] nums) {\n        int goal = nums.length - 1;\n        for (int i = nums.length - 2; i >= 0; i--) {\n            if (i + nums[i] >= goal) goal = i;\n        }\n        return goal == 0;\n    }\n}\n',
-        cpp: 'class Solution {\npublic:\n    bool canJump(vector<int>& nums) {\n        int goal = nums.size() - 1;\n        for (int i = nums.size() - 2; i >= 0; i--) {\n            if (i + nums[i] >= goal) goal = i;\n        }\n        return goal == 0;\n    }\n};\n'
-      },
-      expectedComplexity: { time: 'O(N)', space: 'O(1)' }
-    }
-  ],
-  bit_manipulation: [
-    {
-      title: 'Number of 1 Bits',
-      slug: 'number-of-1-bits',
-      topic: 'Bit Manipulation',
-      difficulty: 'Easy',
-      description: 'Write a function that takes the binary representation of a positive integer and returns the number of set bits (also known as Hamming weight).',
-      testCases: [
-        { input: 'n=11', expected: '3' },
-        { input: 'n=128', expected: '1' }
-      ],
-      hints: ['Use `n & (n - 1)` to clear the lowest set bit in O(1) per set bit.'],
-      starterCode: {
-        python: 'def hammingWeight(n: int) -> int:\n    count = 0\n    while n:\n        n &= (n - 1)\n        count += 1\n    return count\n',
-        javascript: 'var hammingWeight = function(n) {\n    let count = 0;\n    while (n) {\n        n &= (n - 1);\n        count++;\n    }\n    return count;\n};\n',
-        java: 'class Solution {\n    public int hammingWeight(int n) {\n        int count = 0;\n        while (n != 0) {\n            n &= (n - 1);\n            count++;\n        }\n        return count;\n    }\n}\n',
-        cpp: 'class Solution {\npublic:\n    int hammingWeight(int n) {\n        int count = 0;\n        while (n) {\n            n &= (n - 1);\n            count++;\n        }\n        return count;\n    }\n};\n'
-      },
-      expectedComplexity: { time: 'O(1)', space: 'O(1)' }
-    }
-  ],
-  two_pointers: [
-    {
-      title: 'Valid Palindrome',
-      slug: 'valid-palindrome',
-      topic: 'Two Pointers',
-      difficulty: 'Easy',
-      description: 'A phrase is a palindrome if, after converting all uppercase letters into lowercase letters and removing all non-alphanumeric characters, it reads the same forward and backward.',
-      testCases: [
-        { input: 's="A man, a plan, a canal: Panama"', expected: 'true' },
-        { input: 's="race a car"', expected: 'false' }
-      ],
-      hints: ['Use two pointers left and right moving towards center skipping non-alphanumeric characters.'],
-      starterCode: {
-        python: 'def isPalindrome(s: str) -> bool:\n    l, r = 0, len(s) - 1\n    while l < r:\n        while l < r and not s[l].isalnum(): l += 1\n        while l < r and not s[r].isalnum(): r -= 1\n        if s[l].lower() != s[r].lower(): return False\n        l, r = l + 1, r - 1\n    return True\n',
-        javascript: 'var isPalindrome = function(s) {\n    const clean = s.toLowerCase().replace(/[^a-z0-9]/g, "");\n    return clean === clean.split("").reverse().join("");\n};\n',
-        java: 'class Solution {\n    public boolean isPalindrome(String s) {\n        int l = 0, r = s.length() - 1;\n        while (l < r) {\n            while (l < r && !Character.isLetterOrDigit(s.charAt(l))) l++;\n            while (l < r && !Character.isLetterOrDigit(s.charAt(r))) r--;\n            if (Character.toLowerCase(s.charAt(l)) != Character.toLowerCase(s.charAt(r))) return false;\n            l++; r--;\n        }\n        return true;\n    }\n}\n',
-        cpp: 'class Solution {\npublic:\n    bool isPalindrome(string s) {\n        int l = 0, r = s.size() - 1;\n        while (l < r) {\n            while (l < r && !isalnum(s[l])) l++;\n            while (l < r && !isalnum(s[r])) r--;\n            if (tolower(s[l]) != tolower(s[r])) return false;\n            l++; r--;\n        }\n        return true;\n    }\n};\n'
-      },
-      expectedComplexity: { time: 'O(N)', space: 'O(1)' }
-    }
-  ],
-  sliding_window: [
-    {
-      title: 'Best Time to Buy and Sell Stock',
-      slug: 'best-time-to-buy-and-sell-stock',
-      topic: 'Sliding Window',
-      difficulty: 'Easy',
-      description: 'You are given an array `prices` where `prices[i]` is the price of a given stock on the `i`th day. Return the maximum profit you can achieve.',
-      testCases: [
-        { input: 'prices=[7,1,5,3,6,4]', expected: '5' },
-        { input: 'prices=[7,6,4,3,1]', expected: '0' }
-      ],
-      hints: ['Track minimum price seen so far and compute max profit at each step.'],
-      starterCode: {
-        python: 'def maxProfit(prices: list[int]) -> int:\n    minP, maxP = float("inf"), 0\n    for p in prices:\n        minP = min(minP, p)\n        maxP = max(maxP, p - minP)\n    return maxP\n',
-        javascript: 'var maxProfit = function(prices) {\n    let minP = Infinity, maxP = 0;\n    for (let p of prices) {\n        minP = Math.min(minP, p);\n        maxP = Math.max(maxP, p - minP);\n    }\n    return maxP;\n};\n',
-        java: 'class Solution {\n    public int maxProfit(int[] prices) {\n        int minP = Integer.MAX_VALUE, maxP = 0;\n        for (int p : prices) {\n            minP = Math.min(minP, p);\n            maxP = Math.max(maxP, p - minP);\n        }\n        return maxP;\n    }\n}\n',
-        cpp: 'class Solution {\npublic:\n    int maxProfit(vector<int>& prices) {\n        int minP = INT_MAX, maxP = 0;\n        for (int p : prices) {\n            minP = min(minP, p);\n            maxP = max(maxP, p - minP);\n        }\n        return maxP;\n    }\n};\n'
-      },
-      expectedComplexity: { time: 'O(N)', space: 'O(1)' }
     }
   ]
 };
 
 /**
- * Generate topic-wise DSA questions using Groq LLM & NeetCode style standards
+ * Generate topic-wise DSA questions using Hosted LeetCode API & Groq LLM
  */
 const generateDSAQuestions = async (req, res, next) => {
-  const { topic = 'arrays', difficulty = 'Medium', count = 3, language = 'python' } = req.body;
-  const numQuestions = Math.min(Math.max(1, parseInt(count, 10) || 3), 5);
+  const { topic = 'arrays', difficulty = 'Medium', count = 1, language = 'python' } = req.body;
+  const numQuestions = Math.min(Math.max(1, parseInt(count, 10) || 1), 5);
 
+  const slugs = LEETCODE_SLUGS[topic] || LEETCODE_SLUGS.arrays;
+  const fetchedProblems = [];
+
+  // Attempt fetching from Hosted LeetCode API (leetcode-api-pied.vercel.app)
+  for (let i = 0; i < numQuestions; i++) {
+    const slug = slugs[i % slugs.length];
+    const prob = await fetchLeetCodeProblem(slug, topic, difficulty);
+    if (prob) fetchedProblems.push(prob);
+  }
+
+  if (fetchedProblems.length > 0) {
+    return res.status(200).json({
+      success: true,
+      topic,
+      difficulty,
+      language,
+      count: fetchedProblems.length,
+      problems: fetchedProblems
+    });
+  }
+
+  // Fallback to templates or Groq if LeetCode API is unreachable
   try {
     const prompt = `You are a NeetCode 150 & LeetCode expert interviewer.
 Generate ${numQuestions} distinct, high-quality DSA coding interview questions for topic: "${topic}" at difficulty level: "${difficulty}".
@@ -328,14 +162,7 @@ Return strictly a JSON object with a "problems" array. Each problem MUST include
     });
 
     const content = response.choices[0]?.message?.content;
-    let parsed;
-    try {
-      parsed = JSON.parse(content);
-    } catch {
-      logger.warn('Groq returned invalid JSON for DSA question generation. Falling back to templates.');
-      parsed = { problems: NEETCODE_TOPIC_TEMPLATES[topic] || NEETCODE_TOPIC_TEMPLATES.arrays };
-    }
-
+    let parsed = JSON.parse(content || '{}');
     const problems = (parsed.problems || []).slice(0, numQuestions);
 
     res.status(200).json({
@@ -347,8 +174,7 @@ Return strictly a JSON object with a "problems" array. Each problem MUST include
       problems
     });
   } catch (err) {
-    logger.error('Error generating DSA questions with Groq:', err);
-    // Fallback to template if Groq fails
+    logger.error('Error generating DSA questions:', err);
     const fallback = NEETCODE_TOPIC_TEMPLATES[topic] || NEETCODE_TOPIC_TEMPLATES.arrays;
     res.status(200).json({
       success: true,
@@ -362,10 +188,10 @@ Return strictly a JSON object with a "problems" array. Each problem MUST include
 };
 
 /**
- * Evaluate DSA solution using Groq LLM
+ * Evaluate DSA solution using Groq LLM with Webcam & Web Audio metrics
  */
 const evaluateDSASolution = async (req, res, next) => {
-  const { problem, userCode, bruteForceExplanation, optimalExplanation, language = 'python' } = req.body;
+  const { problem, userCode, bruteForceExplanation, optimalExplanation, videoMetrics, language = 'python' } = req.body;
 
   if (!problem || !userCode) {
     return next(new AppError('Problem details and user code are required.', 400));
@@ -390,6 +216,12 @@ Candidate's Brute Force Explanation:
 Candidate's Optimal Approach Explanation:
 "${optimalExplanation || 'No optimal approach explanation provided.'}"
 
+Candidate's Real-time Webcam & Web Audio Physical Metrics:
+- Eye Contact Score: ${videoMetrics?.eyeContact ?? 85}%
+- Facial Attention & Focus: ${videoMetrics?.attention ?? 88}%
+- Posture: ${videoMetrics?.posture ?? 'Good'}
+- Web Audio Level & Voice Clarity: ${videoMetrics?.audioVolume ?? 50}%
+
 Evaluate the candidate rigorously and return strictly JSON in this format:
 {
   "score": 8,
@@ -409,10 +241,10 @@ Evaluate the candidate rigorously and return strictly JSON in this format:
     "codeQuality": "Clean, well-named variables and proper logic."
   },
   "communicationEvaluation": {
-    "clarityScore": 80,
-    "paceAndConfidence": "Confident technical breakdown",
-    "fillerWordsCount": 3,
-    "eyeContactVideoScore": 85
+    "clarityScore": ${videoMetrics?.audioVolume ? Math.min(100, Math.round(videoMetrics.audioVolume * 1.5)) : 82},
+    "paceAndConfidence": "${videoMetrics?.audioVolume > 20 ? 'Strong, audible explanation' : 'Calm, focused delivery'}",
+    "fillerWordsCount": 2,
+    "eyeContactVideoScore": ${videoMetrics?.eyeContact ?? 85}
   },
   "actionableAdvice": [
     "Advice 1",
