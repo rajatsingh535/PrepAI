@@ -8,6 +8,8 @@ import {
 } from 'lucide-react';
 import { interviewAPI, sessionAPI } from '@/services/api';
 import toast from 'react-hot-toast';
+import ThemeToggle from '@/components/common/ThemeToggle';
+import { useAppContext } from '@/context';
 
 const DIFFICULTY_CLR = { easy: 'badge-success', medium: 'badge-warning', hard: 'badge-danger' };
 const CATEGORY_CLR   = { technical: 'badge-brand', behavioral: 'badge-slate', situational: 'badge-warning', hr: 'badge-success', culture_fit: 'badge-danger' };
@@ -155,6 +157,8 @@ function MetricBar({ label, value, color }) {
 export default function InterviewSessionPage() {
   const { id: interviewId } = useParams();
   const navigate = useNavigate();
+  const { theme } = useAppContext();
+  const isLight = theme === 'light';
 
   const [interview,     setInterview]     = useState(null);
   const [session,       setSession]       = useState(null);
@@ -355,7 +359,7 @@ export default function InterviewSessionPage() {
   };
 
   if (loading) return (
-    <div className="flex items-center justify-center h-96">
+    <div className={`flex items-center justify-center h-96 ${isLight ? 'iv-theme-light' : 'iv-theme-dark'}`}>
       <div className="text-center">
         <Zap className="w-12 h-12 text-brand-400 mx-auto mb-4 animate-pulse" />
         <p className="text-slate-400">Loading your interview session...</p>
@@ -366,7 +370,7 @@ export default function InterviewSessionPage() {
   if (!interview || !session) return null;
 
   return (
-    <div className="max-w-6xl mx-auto animate-fade-in">
+    <div className={`max-w-6xl mx-auto animate-fade-in rounded-2xl p-1 ${isLight ? 'iv-theme-light' : 'iv-theme-dark'}`}>
       {/* ── Top Header ──────────────────────────────────────────── */}
       <div className="card p-4 mb-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
@@ -399,6 +403,7 @@ export default function InterviewSessionPage() {
           >
             {camEnabled ? <><CameraOff className="w-4 h-4" /> Stop Cam</> : <><Camera className="w-4 h-4" /> Enable Cam</>}
           </button>
+          <ThemeToggle />
         </div>
       </div>
 

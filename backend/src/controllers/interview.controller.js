@@ -57,13 +57,19 @@ exports.generateQuestions = async (req, res, next) => {
   await interview.save();
 
   try {
+    // Enhanced generation with proper error handling
     const questions = await generateInterviewQuestions({
       jobTitle: interview.jobTitle,
       jobDescription: interview.jobDescription,
       experienceLevel: interview.experienceLevel,
       numberOfQuestions: interview.numberOfQuestions,
+      questionTypes: interview.questionTypes,
       resumeText,
     });
+
+    if (!questions || questions.length === 0) {
+      throw new Error('No questions generated - AI returned empty response');
+    }
 
     interview.questions = questions;
     interview.generationStatus = 'generated';
@@ -79,7 +85,11 @@ exports.generateQuestions = async (req, res, next) => {
     interview.generationStatus = 'failed';
     interview.generationError = err.message;
     await interview.save();
-    return next(new AppError(`AI generation failed: ${err.message}`, 500));
+    
+    // Log the full error for debugging
+    console.error('Question generation error:', err);
+    
+    return next(new AppError(`Question generation failed: ${err.message}. Please try again.`, 500));
   }
 };
 

@@ -5,13 +5,13 @@ import Editor from '@monaco-editor/react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import {
   Play, ChevronRight, ChevronLeft, CheckCircle, Clock,
   Loader2, Zap, RotateCcw, Terminal, AlertCircle,
   Code2, Trophy, Mic, MicOff, Camera, CameraOff,
   Lightbulb, Brain, ChevronDown, ChevronUp, X,
-  Volume2, Activity, Cpu
+  Volume2, Activity, Cpu,   Maximize, Minimize
 } from 'lucide-react';
 import { RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer } from 'recharts';
 import toast from 'react-hot-toast';
@@ -130,26 +130,26 @@ const WaveformBars = ({ active }) => (
 );
 
 /* ── Markdown renderer ──────────────────────────────────────────── */
-const MDRenderer = ({ content }) => (
+const MDRenderer = ({ content, isLight }) => (
   <ReactMarkdown remarkPlugins={[remarkGfm]}
     components={{
-      h2: ({ children }) => <h2 className="text-base font-bold text-white mb-3 mt-1">{children}</h2>,
-      h3: ({ children }) => <h3 className="text-sm font-semibold text-slate-300 mb-2 mt-4">{children}</h3>,
-      p:  ({ children }) => <p className="text-sm text-slate-400 leading-relaxed mb-3">{children}</p>,
-      strong: ({ children }) => <strong className="text-white font-semibold">{children}</strong>,
+      h2: ({ children }) => <h2 className={`text-base font-bold mb-3 mt-1 ${isLight ? 'text-zinc-900' : 'text-white'}`}>{children}</h2>,
+      h3: ({ children }) => <h3 className={`text-sm font-semibold mb-2 mt-4 ${isLight ? 'text-zinc-700' : 'text-slate-300'}`}>{children}</h3>,
+      p:  ({ children }) => <p className={`text-sm leading-relaxed mb-3 ${isLight ? 'text-zinc-600' : 'text-slate-400'}`}>{children}</p>,
+      strong: ({ children }) => <strong className={`font-semibold ${isLight ? 'text-zinc-900' : 'text-white'}`}>{children}</strong>,
       code({ inline, className, children }) {
         const lang = /language-(\w+)/.exec(className || '')?.[1];
         return inline
-          ? <code className="px-1.5 py-0.5 rounded-md bg-white/[0.06] text-brand-300 text-xs font-mono border border-white/[0.06]">{children}</code>
-          : <div className="my-3 rounded-xl overflow-hidden border border-white/[0.06] text-xs">
-              <SyntaxHighlighter language={lang || 'text'} style={oneDark}
-                customStyle={{ margin: 0, background: '#0d1117', padding: '12px 16px' }}>
+          ? <code className={`px-1.5 py-0.5 rounded-md text-xs font-mono border ${isLight ? 'bg-zinc-100 text-zinc-800 border-zinc-200' : 'bg-white/[0.06] text-brand-300 border-white/[0.06]'}`}>{children}</code>
+          : <div className={`my-3 rounded-xl overflow-hidden text-xs ${isLight ? 'border border-zinc-200' : 'border border-white/[0.06]'}`}>
+              <SyntaxHighlighter language={lang || 'text'} style={isLight ? oneLight : oneDark}
+                customStyle={{ margin: 0, background: isLight ? '#fafafa' : '#0d1117', padding: '12px 16px' }}>
                 {String(children).replace(/\n$/, '')}
               </SyntaxHighlighter>
             </div>;
       },
       ul: ({ children }) => <ul className="space-y-1 mb-3 ml-3">{children}</ul>,
-      li: ({ children }) => <li className="text-sm text-slate-400 flex gap-2 before:content-['·'] before:text-brand-500 before:font-bold">{children}</li>,
+      li: ({ children }) => <li className={`text-sm flex gap-2 before:content-['·'] before:text-brand-500 before:font-bold ${isLight ? 'text-zinc-600' : 'text-slate-400'}`}>{children}</li>,
     }}>
     {content}
   </ReactMarkdown>
@@ -163,10 +163,14 @@ const LANG_OPTIONS = [
 ];
 
 import { dsaAPI } from '@/services/api';
+import ThemeToggle from '@/components/common/ThemeToggle';
+import { useAppContext } from '@/context';
 
 export default function DSASessionPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const { theme } = useAppContext();
+  const isLight = theme === 'light';
 
   const topic      = searchParams.get('topic')      || 'arrays';
   const difficulty = searchParams.get('difficulty') || 'medium';
@@ -187,6 +191,32 @@ export default function DSASessionPage() {
   const [elapsed,     setElapsed]     = useState(0);
   const [startTime]                   = useState(Date.now());
   const [showScorecard, setShowScorecard] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const containerRef = useRef(null);
+
+  // Fullscreen mode
+  const toggleFullscreen = useCallback(async () => {
+    if (!document.fullscreenElement) {
+      try {
+        await containerRef.current?.requestFullscreen();
+        setIsFullscreen(true);
+        toast.success('Fullscreen mode active', { icon: '🖥️' });
+      } catch (err) {
+        toast.error('Fullscreen not supported');
+      }
+    } else {
+      document.exitFullscreen();
+      setIsFullscreen(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
 
   // Mic / cam
   const [micOn,   setMicOn]   = useState(false);
@@ -353,7 +383,7 @@ export default function DSASessionPage() {
   const handleSubmit = async () => {
     if (!code[currentIdx]?.trim()) return toast.error('Write your solution first');
     setSubmitting(true);
-    toast.loading('Groq AI is evaluating code & approach explanations...', { id: 'eval' });
+    toast.loading('NVIDIA NIM is evaluating code & approach explanations...', { id: 'eval' });
     try {
       const userSolution = code[currentIdx];
       const { data } = await dsaAPI.evaluateSolution({
@@ -412,10 +442,10 @@ export default function DSASessionPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-96">
+      <div className={`flex items-center justify-center h-96 ${isLight ? 'iv-theme-light' : 'iv-theme-dark'}`}>
         <div className="text-center">
           <Zap className="w-12 h-12 text-brand-400 mx-auto mb-4 animate-pulse" />
-          <p className="text-slate-400">Generating NeetCode topic-wise questions with Groq AI...</p>
+          <p className="text-slate-400">Generating DSA questions with NVIDIA NIM...</p>
         </div>
       </div>
     );
@@ -426,7 +456,7 @@ export default function DSASessionPage() {
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-4rem)] bg-[#090d16] overflow-hidden">
+    <div ref={containerRef} className={`flex flex-col overflow-hidden ${isFullscreen ? 'h-screen' : 'h-[calc(100vh-4rem)]'} ${isLight ? 'iv-theme-light bg-white' : 'bg-[#090d16]'}`}>
 
       {/* ── Top bar ─────────────────────────────────────────────── */}
       <div className="flex-shrink-0 h-12 flex items-center justify-between px-4 border-b border-white/[0.06] bg-slate-900/60 backdrop-blur-md">
@@ -450,6 +480,14 @@ export default function DSASessionPage() {
             <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />
             Live Recording
           </div>
+          {/* Fullscreen toggle */}
+          <button onClick={toggleFullscreen}
+            className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.06] text-slate-400 hover:text-white hover:border-white/[0.12] transition-all"
+            title={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}>
+            {isFullscreen ? <Minimize className="w-3.5 h-3.5" /> : <Maximize className="w-3.5 h-3.5" />}
+            <span className="hidden sm:inline">{isFullscreen ? 'Exit' : 'Fullscreen'}</span>
+          </button>
+          <ThemeToggle />
           <span className="text-xs text-slate-500">{currentIdx + 1}/{problems.length}</span>
         </div>
       </div>
@@ -510,7 +548,7 @@ export default function DSASessionPage() {
             {/* ── Problem tab ──── */}
             {leftTab === 'problem' && (
               <div className="space-y-5">
-                <MDRenderer content={problem.description} />
+                <MDRenderer content={problem.description} isLight={isLight} />
 
                 {/* Phase instruction & Candidate Approach inputs */}
                 <div className="rounded-xl bg-brand-500/[0.07] border border-brand-500/20 p-4 space-y-3">
@@ -722,7 +760,7 @@ export default function DSASessionPage() {
         {/* ── RIGHT: Monaco Editor ─────────────────────────────── */}
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Editor topbar */}
-          <div className="flex-shrink-0 flex items-center justify-between px-4 py-2 border-b border-white/[0.06] bg-[#1a1f2e]">
+          <div className={`flex-shrink-0 flex items-center justify-between px-4 py-2 border-b ${isLight ? 'border-zinc-200 bg-zinc-50' : 'border-white/[0.06] bg-[#1a1f2e]'}`}>
             <div className="flex items-center gap-3">
               <select
                 className="text-xs bg-white/[0.04] border border-white/[0.06] text-slate-300 rounded-lg px-3 py-1.5 focus:outline-none focus:border-brand-500/50"
@@ -747,7 +785,7 @@ export default function DSASessionPage() {
               language={lang === 'cpp' ? 'cpp' : lang}
               value={code[currentIdx] || problem?.starterCode?.[lang] || ''}
               onChange={(v) => setCode((p) => ({ ...p, [currentIdx]: v || '' }))}
-              theme="vs-dark"
+              theme={isLight ? 'light' : 'vs-dark'}
               options={{
                 fontSize: 13.5,
                 fontFamily: "'JetBrains Mono', 'Fira Code', monospace",

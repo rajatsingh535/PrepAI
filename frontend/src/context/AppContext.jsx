@@ -4,24 +4,19 @@
  * Global UI/app-level state that doesn't belong to auth:
  *  - Sidebar open/close
  *  - Global loading overlay
- *  - Toast/notification queue (if not using react-hot-toast directly)
- *  - Theme preference
- *
- * Usage:
- *   import { useAppContext } from '@/context';
- *   const { isSidebarOpen, toggleSidebar } = useAppContext();
+ *  - Theme preference (light | dark) persisted to localStorage
  */
 
-import { createContext, useContext, useReducer, useCallback } from 'react';
+import { createContext, useContext, useReducer, useCallback, useEffect } from 'react';
 
-// ─── Initial State ────────────────────────────────────────────────
+const storedTheme = typeof window !== 'undefined' ? localStorage.getItem('prepai-theme') : null;
+
 const initialState = {
   isSidebarOpen:    false,
   isGlobalLoading:  false,
-  theme:            'dark',   // 'dark' | 'light'
+  theme:            storedTheme === 'light' || storedTheme === 'dark' ? storedTheme : 'dark',
 };
 
-// ─── Action Types ─────────────────────────────────────────────────
 const APP_ACTIONS = {
   TOGGLE_SIDEBAR:       'TOGGLE_SIDEBAR',
   SET_SIDEBAR:          'SET_SIDEBAR',
@@ -29,7 +24,6 @@ const APP_ACTIONS = {
   SET_THEME:            'SET_THEME',
 };
 
-// ─── Reducer ──────────────────────────────────────────────────────
 const appReducer = (state, action) => {
   switch (action.type) {
     case APP_ACTIONS.TOGGLE_SIDEBAR:
@@ -49,10 +43,8 @@ const appReducer = (state, action) => {
   }
 };
 
-// ─── Context ──────────────────────────────────────────────────────
 export const AppContext = createContext(null);
 
-// ─── Provider ─────────────────────────────────────────────────────
 export const AppProvider = ({ children }) => {
   const [state, dispatch] = useReducer(appReducer, initialState);
 
@@ -60,6 +52,12 @@ export const AppProvider = ({ children }) => {
   const setSidebar        = useCallback((v) => dispatch({ type: APP_ACTIONS.SET_SIDEBAR, payload: v }), []);
   const setGlobalLoading  = useCallback((v) => dispatch({ type: APP_ACTIONS.SET_GLOBAL_LOADING, payload: v }), []);
   const setTheme          = useCallback((t) => dispatch({ type: APP_ACTIONS.SET_THEME, payload: t }), []);
+
+  useEffect(() => {
+    localStorage.setItem('prepai-theme', state.theme);
+    document.documentElement.classList.toggle('light', state.theme === 'light');
+    document.documentElement.classList.toggle('dark', state.theme === 'dark');
+  }, [state.theme]);
 
   const value = {
     ...state,
@@ -72,7 +70,6 @@ export const AppProvider = ({ children }) => {
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 };
 
-// ─── Hook ─────────────────────────────────────────────────────────
 export const useAppContext = () => {
   const ctx = useContext(AppContext);
   if (!ctx) throw new Error('useAppContext must be used inside <AppProvider>');

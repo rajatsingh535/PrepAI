@@ -8,4 +8,4 @@
  *   export { default as SkeletonCard   } from './SkeletonCard';
  */
 
-// No components yet — add exports here as components are built.
+export { default as ThemeToggle } from './ThemeToggle';

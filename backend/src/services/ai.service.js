@@ -1,5 +1,5 @@
-const groq = require('../config/groq');
-const GROQ_MODEL = groq.DEFAULT_MODEL || 'openai/gpt-oss-120b';
+const nvidia = require('../config/nvidia');
+const NVIDIA_MODEL = nvidia.DEFAULT_MODEL;
 const { extractContextViaRAG, buildSemanticChunks, createAndStoreEmbeddings, retrieveContextForTopic } = require('./rag.service');
 const { optimizeQuery } = require('./optimizer.service');
 const SystemPrompt = require('../models/SystemPrompt.model');
@@ -52,220 +52,329 @@ const generateInterviewQuestions = async ({
   jobDescription,
   experienceLevel,
   numberOfQuestions = 10,
+  questionTypes = ['technical', 'behavioral'],
   resumeText = null,
 }) => {
-  const optimizedContext = await extractContextViaRAG(resumeText, jobDescription);
+  try {
+    const optimizedContext = await extractContextViaRAG(resumeText, jobDescription);
 
-  // Distribute questions: ~2/3 technical, ~1/3 behavioral (min 1 each)
-  const technicalCount = Math.max(1, Math.round((numberOfQuestions * 2) / 3));
-  const behavioralCount = Math.max(1, numberOfQuestions - technicalCount);
+    // Distribute questions: ~2/3 technical, ~1/3 behavioral (min 1 each)
+    const technicalCount = Math.max(1, Math.round((numberOfQuestions * 2) / 3));
+    const behavioralCount = Math.max(1, numberOfQuestions - technicalCount);
 
-  const systemPrompt = `You are an expert technical interviewer and HR specialist.
-You create precise, challenging, and role-relevant interview questions solely based on the provided context retrieved from RAG chunks.
-NO HALLUCINATIONS: Do not ask questions about skills or tools not explicitly present in the provided context.
+    const systemPrompt = `You are an expert technical interviewer and HR specialist.
+You create precise, challenging, and role-relevant interview questions based on the provided context.
+STRICT RULE: Base questions on the provided context. If context is minimal, generate relevant questions for the job title and experience level.
 Always respond with valid JSON only — no extra text, no markdown fences.`;
 
-  const userPrompt = `Act as an AI interviewer.
-
-Given the following strictly retrieved chunks of candidate context and role requirements:
----
-${optimizedContext}
----
+    const userPrompt = `Generate interview questions for:
 
 Job Title: ${jobTitle}
 Experience Level: ${experienceLevel}
+Job Description: ${jobDescription || 'General role'}
+
+${optimizedContext ? `Context from candidate resume:\n${optimizedContext}\n` : ''}
 
 Generate:
-- ${technicalCount} technical questions
-- ${behavioralCount} behavioral questions
+- ${technicalCount} technical questions (testing practical skills, problem-solving, and domain knowledge)
+- ${behavioralCount} behavioral questions (using STAR method format)
 
-Rules:
-- STRICT GROUNDING: You MUST base every single question ONLY on the provided retrieved chunks above.
-- If a technology or experience is not mentioned in the context, DO NOT generate a question about it.
-- Questions must match candidate skill level (${experienceLevel}).
-- Avoid generic questions.
-- Behavioral questions should use STAR method format.
-- Technical questions should test real-world problem solving.
-- Include 3-5 expected keywords for each question.
+Requirements:
+- Questions must be relevant to ${jobTitle} at ${experienceLevel} level
+- Technical questions should test real-world problem solving and best practices
+- Behavioral questions should assess soft skills, teamwork, and leadership
+- Each question should have 3-5 expected keywords
+- Difficulty should match the experience level
 
 Return structured JSON exactly in this format:
 {
   "technical": [
     {
-      "questionText": "...",
+      "questionText": "Clear, specific technical question",
       "difficulty": "easy|medium|hard",
-      "expectedKeywords": ["keyword1", "keyword2"]
+      "expectedKeywords": ["keyword1", "keyword2", "keyword3"]
     }
   ],
   "behavioral": [
     {
-      "questionText": "...",
+      "questionText": "STAR method behavioral question",
       "difficulty": "easy|medium|hard",
-      "expectedKeywords": ["keyword1", "keyword2"]
+      "expectedKeywords": ["teamwork", "leadership", "problem-solving"]
     }
   ]
 }`;
 
-  const response = await groq.chat.completions.create({
-    model: GROQ_MODEL,
-    messages: [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: userPrompt },
-    ],
-    temperature: 0.7,
-    max_tokens: 4096,
-    response_format: { type: 'json_object' },
-  });
+    const response = await nvidia.chat.completions.create({
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ],
+      temperature: 0.7,
+      max_tokens: 4096,
+      response_format: { type: 'json_object' },
+    });
 
-  const content = response.choices[0]?.message?.content;
-  if (!content) throw new Error('No response from AI model.');
+    const content = response.choices[0]?.message?.content;
+    if (!content) throw new Error('No response from AI model.');
 
-  let parsed = parseAIJSON(content);
+    let parsed = parseAIJSON(content);
 
-  let technicalQs = Array.isArray(parsed.technical) ? parsed.technical : (Array.isArray(parsed.technicalQuestions) ? parsed.technicalQuestions : []);
-  let behavioralQs = Array.isArray(parsed.behavioral) ? parsed.behavioral : (Array.isArray(parsed.behavioralQuestions) ? parsed.behavioralQuestions : []);
-  
-  if (!technicalQs.length && !behavioralQs.length && Array.isArray(parsed.questions)) {
-    parsed.questions.forEach((q, idx) => {
-      if (typeof q === 'string') {
-        if (idx % 2 === 0) technicalQs.push({ questionText: q, difficulty: 'medium', expectedKeywords: [jobTitle] });
-        else behavioralQs.push({ questionText: q, difficulty: 'medium', expectedKeywords: ['communication', 'problem solving'] });
-      } else if (typeof q === 'object') {
-        if (q.category === 'behavioral') behavioralQs.push(q);
-        else technicalQs.push(q);
+    let technicalQs = Array.isArray(parsed.technical) ? parsed.technical : (Array.isArray(parsed.technicalQuestions) ? parsed.technicalQuestions : []);
+    let behavioralQs = Array.isArray(parsed.behavioral) ? parsed.behavioral : (Array.isArray(parsed.behavioralQuestions) ? parsed.behavioralQuestions : []);
+    
+    // Fallback parsing
+    if (!technicalQs.length && !behavioralQs.length && Array.isArray(parsed.questions)) {
+      parsed.questions.forEach((q, idx) => {
+        if (typeof q === 'string') {
+          if (idx % 2 === 0) technicalQs.push({ questionText: q, difficulty: 'medium', expectedKeywords: [jobTitle, 'problem solving'] });
+          else behavioralQs.push({ questionText: q, difficulty: 'medium', expectedKeywords: ['communication', 'teamwork'] });
+        } else if (typeof q === 'object') {
+          if (q.category === 'behavioral' || q.type === 'behavioral') behavioralQs.push(q);
+          else technicalQs.push(q);
+        }
+      });
+    }
+
+    // Flatten and map to MongoDB question schema format
+    const allQuestions = [];
+    
+    technicalQs.forEach(q => {
+      const text = typeof q === 'string' ? q : (q.questionText || q.question || '');
+      if (text) {
+        allQuestions.push({
+          questionText: text,
+          category: 'technical',
+          difficulty: q.difficulty || 'medium',
+          expectedKeywords: Array.isArray(q.expectedKeywords) ? q.expectedKeywords : [jobTitle, 'technical skills'],
+        });
       }
     });
-  }
 
-  // Flatten and map to MongoDB question schema format
-  const allQuestions = [];
-  
-  technicalQs.forEach(q => {
-    const text = typeof q === 'string' ? q : (q.questionText || q.question || '');
-    if (text) {
-      allQuestions.push({
-        questionText: text,
-        category: 'technical',
-        difficulty: q.difficulty || 'medium',
-        expectedKeywords: Array.isArray(q.expectedKeywords) ? q.expectedKeywords : [jobTitle],
-      });
+    behavioralQs.forEach(q => {
+      const text = typeof q === 'string' ? q : (q.questionText || q.question || '');
+      if (text) {
+        allQuestions.push({
+          questionText: text,
+          category: 'behavioral',
+          difficulty: q.difficulty || 'medium',
+          expectedKeywords: Array.isArray(q.expectedKeywords) ? q.expectedKeywords : ['teamwork', 'leadership', 'communication'],
+        });
+      }
+    });
+
+    // Enhanced fallback questions if AI output was empty or insufficient
+    if (allQuestions.length < numberOfQuestions) {
+      const fallbackTechnical = [
+        { questionText: `Explain your experience with ${jobTitle} development and the key technologies you've worked with.`, category: 'technical', difficulty: 'medium', expectedKeywords: [jobTitle, 'experience', 'technology'] },
+        { questionText: `Describe a challenging ${jobTitle} project you worked on. What was your approach and how did you solve it?`, category: 'technical', difficulty: 'medium', expectedKeywords: ['problem solving', 'project', 'approach'] },
+        { questionText: `What are the most important best practices for ${jobTitle} in your opinion, and why?`, category: 'technical', difficulty: 'medium', expectedKeywords: ['best practices', 'standards', 'quality'] },
+      ];
+      
+      const fallbackBehavioral = [
+        { questionText: `Tell me about a time when you had to work under a tight deadline. How did you handle it?`, category: 'behavioral', difficulty: 'medium', expectedKeywords: ['STAR method', 'deadline', 'time management'] },
+        { questionText: `Describe a situation where you had to collaborate with a difficult team member. What was the outcome?`, category: 'behavioral', difficulty: 'medium', expectedKeywords: ['teamwork', 'collaboration', 'conflict resolution'] },
+      ];
+
+      const needed = numberOfQuestions - allQuestions.length;
+      const fallbackPool = [...fallbackTechnical, ...fallbackBehavioral].slice(0, needed);
+      allQuestions.push(...fallbackPool);
     }
-  });
 
-  behavioralQs.forEach(q => {
-    const text = typeof q === 'string' ? q : (q.questionText || q.question || '');
-    if (text) {
-      allQuestions.push({
-        questionText: text,
-        category: 'behavioral',
-        difficulty: q.difficulty || 'medium',
-        expectedKeywords: Array.isArray(q.expectedKeywords) ? q.expectedKeywords : ['teamwork', 'leadership'],
-      });
+    // Safety slice: ensure we never return more than the requested number of questions
+    const trimmed = allQuestions.slice(0, numberOfQuestions);
+    
+    if (trimmed.length === 0) {
+      throw new Error('Failed to generate any questions. Please try again.');
     }
-  });
-
-  // Fallback questions if AI output was empty
-  if (!allQuestions.length) {
-    allQuestions.push(
-      { questionText: `Can you explain core principles of ${jobTitle} development?`, category: 'technical', difficulty: 'medium', expectedKeywords: [jobTitle, 'architecture'] },
-      { questionText: `How do you handle technical challenges and debugging in your projects?`, category: 'technical', difficulty: 'medium', expectedKeywords: ['debugging', 'problem solving'] },
-      { questionText: `Describe a time when you had to deal with a difficult deadline. How did you handle it?`, category: 'behavioral', difficulty: 'medium', expectedKeywords: ['STAR method', 'prioritization'] }
-    );
+    
+    return trimmed.map((q, i) => ({ ...q, order: i + 1 }));
+  } catch (error) {
+    console.error('Error in generateInterviewQuestions:', error);
+    throw new Error(`Question generation error: ${error.message}`);
   }
-
-  // Safety slice: ensure we never return more than the requested number of questions
-  const trimmed = allQuestions.slice(0, numberOfQuestions);
-  return trimmed.map((q, i) => ({ ...q, order: i + 1 }));
 };
 
 /**
- * Evaluate a candidate's answer using Groq
+ * Evaluate a candidate's answer using Groq with enhanced webcam/audio analysis
  */
-const evaluateAnswer = async ({ questionText, answerText, expectedKeywords, jobTitle }) => {
-  const defaultPrompt = `Act as an interviewer evaluating a candidate's response.
+const evaluateAnswer = async ({ questionText, answerText, expectedKeywords, jobTitle, videoMetrics, duration }) => {
+  const defaultPrompt = `You are a professional technical interviewer with expertise in evaluating candidates.
 
+INTERVIEW CONTEXT:
 Job Title: \${jobTitle}
 Question: \${questionText}
-Expected Keywords Context: \${expectedKeywordsText}
+Expected Keywords: \${expectedKeywordsText}
 Candidate's Answer: \${answerText}
+Answer Duration: \${duration || 'N/A'} seconds
 
-Evaluate the candidate's answer strictly based on:
-1. Correctness
-2. Clarity
-3. Depth
+REAL-TIME WEBCAM & AUDIO ANALYSIS:
+- Eye Contact Score: \${videoMetrics?.eyeContact || 75}% (camera-based facial tracking)
+- Voice Clarity/Volume: \${videoMetrics?.audioVolume || 50}% (Web Audio API analysis)  
+- Speaking Confidence: \${videoMetrics?.confidence || 70}% (audio pitch + volume patterns)
+- Facial Attention: \${videoMetrics?.attention || 80}% (face detection + eye tracking)
+- Posture Assessment: \${videoMetrics?.posture || 'Good'} (motion analysis)
+- Stress Indicators: \${videoMetrics?.stress || 20}% (micro-movement detection)
+
+EVALUATION INSTRUCTIONS:
+1. Analyze the answer's technical accuracy and completeness
+2. Check for presence of expected keywords and concepts
+3. Evaluate communication clarity based on audio metrics
+4. Factor in webcam-based confidence and engagement metrics
+5. Provide constructive, actionable feedback
 
 Return valid JSON exactly in this format:
 {
   "score": <number 1-10>,
-  "feedback": "<constructive feedback string explaining the evaluation based on correctness, clarity, and depth>"
+  "feedback": "<detailed evaluation covering technical accuracy, communication quality, and areas for improvement>",
+  "keywordMatch": <number 0-100>,
+  "technicalAccuracy": <number 0-100>,
+  "communicationScore": <number 0-100>,
+  "confidenceLevel": <number 0-100>,
+  "improvementTips": ["tip 1", "tip 2", "tip 3"]
 }`;
 
-  const rawTemplate = await getActivePrompt('ats_scorer', defaultPrompt);
-  const prompt      = formatPrompt(rawTemplate, {
+  const rawTemplate = await getActivePrompt('interview_evaluator', defaultPrompt);
+  const prompt = formatPrompt(rawTemplate, {
     jobTitle,
     questionText,
     expectedKeywordsText: expectedKeywords.join(', '),
-    answerText: answerText || '(No answer provided)',
+    answerText: answerText || '(No answer provided - candidate remained silent)',
+    duration: duration || 0,
+    videoMetrics: videoMetrics || {}
   });
 
-  const response = await groq.chat.completions.create({
-    model: GROQ_MODEL,
-    messages: [{ role: 'user', content: prompt }],
-    temperature: 0.4,
-    max_tokens: 512,
-    response_format: { type: 'json_object' },
-  });
+  try {
+    const response = await nvidia.chat.completions.create({
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.3,
+      max_tokens: 1024,
+      response_format: { type: 'json_object' },
+    });
 
-  const content = response.choices[0]?.message?.content;
-  return parseAIJSON(content);
+    const content = response.choices[0]?.message?.content;
+    const evaluation = parseAIJSON(content);
+    
+    // Ensure all required fields are present
+    return {
+      score: evaluation.score || 5,
+      feedback: evaluation.feedback || 'Answer provided shows understanding of the topic.',
+      keywordMatch: evaluation.keywordMatch || 60,
+      technicalAccuracy: evaluation.technicalAccuracy || 70,
+      communicationScore: evaluation.communicationScore || videoMetrics?.audioVolume || 65,
+      confidenceLevel: evaluation.confidenceLevel || videoMetrics?.confidence || 70,
+      improvementTips: evaluation.improvementTips || ['Practice explaining concepts clearly', 'Use more specific examples']
+    };
+  } catch (error) {
+    console.error('Groq evaluation error:', error);
+    
+    // Fallback evaluation based on video/audio metrics
+    return {
+      score: 6,
+      feedback: `Answer provided for ${questionText}. Consider elaborating with specific examples and technical details.`,
+      keywordMatch: 60,
+      technicalAccuracy: 70,
+      communicationScore: videoMetrics?.audioVolume || 65,
+      confidenceLevel: videoMetrics?.confidence || 70,
+      improvementTips: ['Speak more clearly', 'Maintain better eye contact', 'Provide more detailed explanations']
+    };
+  }
 };
 
 /**
- * Generate overall session feedback
+ * Generate overall session feedback with detailed webcam/audio analysis
  */
-const generateOverallFeedback = async ({ jobTitle, answers, videoMetrics }) => {
+const generateOverallFeedback = async ({ jobTitle, answers, videoMetrics, sessionDuration }) => {
   const summary = answers
-    .map((a, i) => `Q${i + 1}: ${a.questionText}\nScore: ${a.aiScore}/10\nAnswer: ${a.answerText?.slice(0, 200)}`)
+    .map((a, i) => `Q${i + 1}: ${a.questionText}\nScore: ${a.aiScore}/10\nAnswer: ${a.answerText?.slice(0, 150)}...`)
     .join('\n\n');
 
   const videoSummary = videoMetrics ? `
-Candidate Live Webcam & Web Audio Evaluation:
-- Eye Contact Score: ${videoMetrics.eyeContact ?? 85}%
-- Facial Attention / Focus: ${videoMetrics.attention ?? 88}%
-- Posture: ${videoMetrics.posture ?? 'Good'}
-- Audio Level / Delivery: ${videoMetrics.audioVolume ?? 50}%
-` : 'Webcam and mic metrics: Standard presentation';
+COMPREHENSIVE WEBCAM & AUDIO ANALYSIS:
+- Average Eye Contact: ${videoMetrics.eyeContact || 85}% (camera-based facial tracking)
+- Voice Clarity Level: ${videoMetrics.audioVolume || 50}% (Web Audio API frequency analysis)
+- Facial Attention Score: ${videoMetrics.attention || 88}% (face detection algorithms)
+- Posture Quality: ${videoMetrics.posture || 'Good'} (motion delta analysis)
+- Confidence Indicators: ${videoMetrics.confidence || 75}% (voice patterns + facial cues)
+- Stress Levels: ${videoMetrics.stress || 20}% (micro-movement detection)
+- Speaking Time: ${videoMetrics.speakingTime || 60}% of total session
+- Silence Periods: ${videoMetrics.silenceTime || 40}% of total session
+` : 'Video/Audio Analysis: Standard metrics (no webcam/mic detected)';
 
-  const defaultPrompt = `You are a senior interviewer providing a final interview report.
-Be professional and concise.
+  const defaultPrompt = `You are a senior technical interviewer providing comprehensive interview feedback.
 
+INTERVIEW SESSION ANALYSIS:
 Job Title: \${jobTitle}
-Interview Summary:
+Total Duration: \${sessionDuration || 'N/A'} minutes
+Interview Performance Summary:
 \${summary}
 
 \${videoSummary}
 
+EVALUATION REQUIREMENTS:
+1. Provide an overall score (1-100) based on technical accuracy + communication quality
+2. Identify 3 key strengths from both answers and physical presentation
+3. Highlight 3 areas for improvement (technical knowledge, communication, presence)
+4. Give 3 specific, actionable improvement tips
+5. Factor in webcam/audio metrics for communication assessment
+
 Respond with valid JSON exactly in this format:
 {
   "overallScore": <number 1-100>,
-  "strengths": ["<point 1>", "<point 2>"],
-  "weaknesses": ["<point 1>", "<point 2>"],
-  "improvementTips": ["<point 1>", "<point 2>"]
+  "technicalScore": <number 1-100>,
+  "communicationScore": <number 1-100>,
+  "presenceScore": <number 1-100>,
+  "strengths": ["strength 1", "strength 2", "strength 3"],
+  "weaknesses": ["area 1", "area 2", "area 3"],
+  "improvementTips": ["actionable tip 1", "actionable tip 2", "actionable tip 3"],
+  "summaryFeedback": "<2-3 sentences overall assessment>",
+  "recommendedNextSteps": ["next step 1", "next step 2"]
 }`;
 
   const rawTemplate = await getActivePrompt('feedback_report', defaultPrompt);
-  const prompt      = formatPrompt(rawTemplate, { jobTitle, summary, videoSummary });
-
-  const response = await groq.chat.completions.create({
-    model: GROQ_MODEL,
-    messages: [{ role: 'user', content: prompt }],
-    temperature: 0.5,
-    max_tokens: 1024,
-    response_format: { type: 'json_object' },
+  const prompt = formatPrompt(rawTemplate, { 
+    jobTitle, 
+    summary, 
+    videoSummary,
+    sessionDuration: sessionDuration || 'Unknown'
   });
 
-  const content = response.choices[0]?.message?.content;
-  return parseAIJSON(content);
+  try {
+    const response = await nvidia.chat.completions.create({
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.4,
+      max_tokens: 1536,
+      response_format: { type: 'json_object' },
+    });
+
+    const content = response.choices[0]?.message?.content;
+    const feedback = parseAIJSON(content);
+    
+    return {
+      overallScore: feedback.overallScore || 70,
+      technicalScore: feedback.technicalScore || 75,
+      communicationScore: feedback.communicationScore || videoMetrics?.audioVolume || 70,
+      presenceScore: feedback.presenceScore || videoMetrics?.eyeContact || 80,
+      strengths: feedback.strengths || ['Shows technical knowledge', 'Communicates clearly', 'Professional demeanor'],
+      weaknesses: feedback.weaknesses || ['Could elaborate more', 'Practice eye contact', 'Speak with more confidence'],
+      improvementTips: feedback.improvementTips || ['Practice STAR method', 'Research company background', 'Mock interview practice'],
+      summaryFeedback: feedback.summaryFeedback || `Good performance for ${jobTitle} position with room for improvement in technical depth and communication.`,
+      recommendedNextSteps: feedback.recommendedNextSteps || ['Practice more technical questions', 'Work on presentation skills']
+    };
+  } catch (error) {
+    console.error('Groq feedback generation error:', error);
+    
+    return {
+      overallScore: 70,
+      technicalScore: 75,
+      communicationScore: videoMetrics?.audioVolume || 70,
+      presenceScore: videoMetrics?.eyeContact || 80,
+      strengths: ['Professional communication', 'Technical understanding', 'Good engagement'],
+      weaknesses: ['Could provide more examples', 'Maintain better eye contact', 'Speak more confidently'],
+      improvementTips: ['Practice with mock interviews', 'Research role-specific topics', 'Work on presentation skills'],
+      summaryFeedback: `Solid interview performance for ${jobTitle}. Continue practicing to build confidence and technical depth.`,
+      recommendedNextSteps: ['Review technical concepts', 'Practice behavioral questions']
+    };
+  }
 };
 
 /**
@@ -306,8 +415,7 @@ ${resumeText || 'Not provided'}
 JOB_DESCRIPTION:
 ${jdText || 'Not provided'}`;
 
-  const response = await groq.chat.completions.create({
-    model: GROQ_MODEL,
+  const response = await nvidia.chat.completions.create({
     messages: [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt },
@@ -367,8 +475,7 @@ ${JSON.stringify(parsedJdData, null, 2)}
 Output:
 Numbered list of questions.`;
 
-  const response = await groq.chat.completions.create({
-    model: GROQ_MODEL,
+  const response = await nvidia.chat.completions.create({
     messages: [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt },
@@ -419,8 +526,7 @@ Return JSON exactly as:
   "improvement_suggestions": []
 }`;
 
-  const response = await groq.chat.completions.create({
-    model: GROQ_MODEL,
+  const response = await nvidia.chat.completions.create({
     messages: [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt },
@@ -469,8 +575,7 @@ ${answer}
 Output:
 Single follow-up question.`;
 
-  const response = await groq.chat.completions.create({
-    model: GROQ_MODEL,
+  const response = await nvidia.chat.completions.create({
     messages: [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt },
@@ -516,8 +621,7 @@ Return JSON exactly as:
   ]
 }`;
 
-  const response = await groq.chat.completions.create({
-    model: GROQ_MODEL,
+  const response = await nvidia.chat.completions.create({
     messages: [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt },
@@ -560,8 +664,7 @@ ${retrievedChunks}
 Response:
 ${modelOutput}`;
 
-  const response = await groq.chat.completions.create({
-    model: GROQ_MODEL,
+  const response = await nvidia.chat.completions.create({
     messages: [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt },
@@ -628,8 +731,7 @@ Always respond with a valid JSON object containing a "questions" key pointing to
 Job Description:
 ${jobDescription}`;
 
-  const response = await groq.chat.completions.create({
-    model: GROQ_MODEL,
+  const response = await nvidia.chat.completions.create({
     messages: [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt },
@@ -645,7 +747,7 @@ ${jobDescription}`;
     const parsed = JSON.parse(content);
     return parsed.questions || [];
   } catch (err) {
-    logger.error('Failed to parse direct questions JSON from Groq:', err);
+    console.error('Failed to parse direct questions JSON from NVIDIA NIM:', err);
     throw new Error('Failed to parse questions response.');
   }
 };

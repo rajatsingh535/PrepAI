@@ -1,5 +1,5 @@
-const groq = require('../config/groq');
-const GROQ_MODEL = groq.DEFAULT_MODEL || 'groq/compound';
+const nvidia = require('../config/nvidia');
+const NVIDIA_MODEL = nvidia.DEFAULT_MODEL;
 
 /**
  * Optimize a search query for vector search using Groq LLM
@@ -33,8 +33,7 @@ Output:
 Optimized query only.`;
 
   try {
-    const response = await groq.chat.completions.create({
-      model: GROQ_MODEL,
+    const response = await nvidia.chat.completions.create({
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },

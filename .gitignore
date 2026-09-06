@@ -15,4 +15,6 @@ Thumbs.db
 # backend
 /backend/node_modules
 /backend/.env
+*.backup
+backend/tmp-*
 

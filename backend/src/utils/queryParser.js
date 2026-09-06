@@ -251,12 +251,10 @@ function ambiguityScore(raw, parsed) {
  * @returns {Promise<object>} Canonical shape (same keys as ruleBasedParse output)
  */
 async function llmFallbackParse(query, partial = {}) {
-  // Lazy-require so the module is still importable without Groq configured
-  let groq;
+  let nvidia;
   try {
-    groq = require('../config/groq');
+    nvidia = require('../config/nvidia');
   } catch {
-    // Groq not configured — return partial result with a flag
     return { ...partial, _llmSkipped: true };
   }
 
@@ -284,8 +282,7 @@ ${JSON.stringify(partial, null, 2)}
 Return the complete JSON object now:`;
 
   try {
-    const response = await groq.chat.completions.create({
-      model          : groq.DEFAULT_MODEL || 'groq/compound',
+    const response = await nvidia.chat.completions.create({
       messages       : [
         { role: 'system', content: systemPrompt },
         { role: 'user',   content: userPrompt   },
