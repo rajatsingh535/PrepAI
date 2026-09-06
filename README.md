@@ -2,11 +2,14 @@
 
 Built by [Rajat Singh](https://github.com/rajatsingh535).
 
-PrepAI is a MERN interview practice platform. Candidates generate role-specific mock interviews, practice DSA problems, and receive AI scoring. **Question generation and answer analysis use NVIDIA NIM** (`https://integrate.api.nvidia.com/v1`), not Groq.
+PrepAI is a MERN interview practice platform. Candidates generate role-specific mock interviews, practice DSA problems, and receive AI scoring.
+
+- **AI Mock Interview**: Question generation and answer/session analysis use the **Requesty LLM router** (`https://router.requesty.ai/v1`, default model `google/gemma-4-31b-it`). Webcam + Web Audio API metrics (eye contact, posture, voice clarity) are captured during sessions and factored into the AI analysis response.
+- **DSA Interview**: Questions come exclusively from local datasets (`dsa_questions.json`, `merged_problems.json`). **No AI is used for DSA question generation.** AI (via Requesty) is used only for solution evaluation and test case validation. Webcam + audio metrics are also analysed during DSA sessions.
 
 ## Quick start
 
-1. Copy `backend/.env.example` to `backend/.env` and fill in MongoDB, JWT, and `NVIDIA_NIM_API_KEY`.
+1. Copy `backend/.env.example` to `backend/.env` and fill in `MONGODB_URI`, `JWT_SECRET`, `JWT_REFRESH_SECRET`, and `REQUESTY_API_KEY`.
 2. Copy `frontend/.env.example` to `frontend/.env` if you need a custom API URL.
 3. From the repo root:
 
@@ -19,7 +22,7 @@ cd ../frontend && npm install
 4. Run backend (`npm run dev` in `backend`) and frontend (`npm run dev` in `frontend`).
 5. Open `http://localhost:5173`.
 
-Get an NVIDIA key from [build.nvidia.com](https://build.nvidia.com). Never commit `.env` files or API keys.
+Get a Requesty key from [requesty.ai](https://requesty.ai). Never commit `.env` files or API keys.
 
 ## Architecture
 
@@ -153,8 +156,10 @@ AI mock interviews (`/interviews/:id/session`) and DSA interviews (`/dsa-session
 
 | File | Role |
 |---|---|
-| `dsa_questions.json` | Built-in DSA problem bank. |
-| `merged_problems.json` | Larger LeetCode-style problem dump (optional). |
+| `dsa_questions.json` | Built-in DSA problem bank (Kaggle dataset, committed). |
+| `merged_problems.json` | Large LeetCode-style problem dump (~20 MB, **gitignored** – place manually after cloning). |
+
+> **Note:** `merged_problems.json` is excluded from git due to its size. The backend will fall back to `dsa_questions.json` and/or the hosted LeetCode API if the file is absent.
 
 ---
 
@@ -217,8 +222,9 @@ AI mock interviews (`/interviews/:id/session`) and DSA interviews (`/dsa-session
 
 | Name | Purpose |
 |---|---|
-| `NVIDIA_NIM_API_KEY` | NVIDIA NIM key (`nvapi-...`). Required for questions and analysis. |
-| `NVIDIA_MODEL` | Optional model id. Default `openai/gpt-oss-20b`. |
+| `REQUESTY_API_KEY` | Requesty router key. Required for questions and analysis. |
+| `LLM_BASE_URL` | Default `https://router.requesty.ai/v1`. |
+| `LLM_MODEL` | Default `google/gemma-4-31b-it`. |
 | `MONGO_URI` / `MONGODB_URI` | MongoDB connection string. |
 | `JWT_SECRET` / `JWT_REFRESH_SECRET` | Auth tokens. |
 | `CLIENT_URL` | Frontend origin for CORS (default `http://localhost:5173`). |

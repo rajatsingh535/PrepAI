@@ -383,7 +383,7 @@ export default function DSASessionPage() {
   const handleSubmit = async () => {
     if (!code[currentIdx]?.trim()) return toast.error('Write your solution first');
     setSubmitting(true);
-    toast.loading('NVIDIA NIM is evaluating code & approach explanations...', { id: 'eval' });
+    toast.loading('Evaluating your solution...', { id: 'eval' });
     try {
       const userSolution = code[currentIdx];
       const { data } = await dsaAPI.evaluateSolution({
@@ -445,7 +445,7 @@ export default function DSASessionPage() {
       <div className={`flex items-center justify-center h-96 ${isLight ? 'iv-theme-light' : 'iv-theme-dark'}`}>
         <div className="text-center">
           <Zap className="w-12 h-12 text-brand-400 mx-auto mb-4 animate-pulse" />
-          <p className="text-slate-400">Generating DSA questions with NVIDIA NIM...</p>
+          <p className="text-slate-400">Preparing your DSA interview...</p>
         </div>
       </div>
     );
@@ -456,7 +456,7 @@ export default function DSASessionPage() {
   }
 
   return (
-    <div ref={containerRef} className={`flex flex-col overflow-hidden ${isFullscreen ? 'h-screen' : 'h-[calc(100vh-4rem)]'} ${isLight ? 'iv-theme-light bg-white' : 'bg-[#090d16]'}`}>
+    <div ref={containerRef} className={`flex flex-col overflow-hidden ${isFullscreen ? 'h-screen' : 'h-[calc(100vh-4rem)]'} ${isLight ? 'iv-theme-light bg-[#f4f6f9]' : 'iv-theme-dark bg-[#0f172a]'}`}>
 
       {/* ── Top bar ─────────────────────────────────────────────── */}
       <div className="flex-shrink-0 h-12 flex items-center justify-between px-4 border-b border-white/[0.06] bg-slate-900/60 backdrop-blur-md">
@@ -760,7 +760,7 @@ export default function DSASessionPage() {
         {/* ── RIGHT: Monaco Editor ─────────────────────────────── */}
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Editor topbar */}
-          <div className={`flex-shrink-0 flex items-center justify-between px-4 py-2 border-b ${isLight ? 'border-zinc-200 bg-zinc-50' : 'border-white/[0.06] bg-[#1a1f2e]'}`}>
+          <div className={`flex-shrink-0 flex items-center justify-between px-4 py-2 border-b ${isLight ? 'border-[#dbe3ee] bg-white' : 'border-white/[0.06] bg-[#1e293b]'}`}>
             <div className="flex items-center gap-3">
               <select
                 className="text-xs bg-white/[0.04] border border-white/[0.06] text-slate-300 rounded-lg px-3 py-1.5 focus:outline-none focus:border-brand-500/50"

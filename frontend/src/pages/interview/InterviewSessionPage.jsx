@@ -23,6 +23,7 @@ function useFacialAnalysis(videoRef, enabled) {
     eyeContact:  85,
     emotion:     'Focused',
     posture:     'Good',
+    audioVolume: 0,
   });
   const intervalRef = useRef(null);
   const audioCtxRef = useRef(null);
@@ -117,7 +118,7 @@ function useFacialAnalysis(videoRef, enabled) {
       const posture    = motionDelta > 60 ? 'Sit straighter' : centerBrightness < 40 ? 'Adjust lighting' : 'Good';
       const emotion    = audioVolume > 35 ? 'Confident' : audioVolume > 10 ? 'Focused' : motionDelta > 40 ? 'Thinking' : 'Calm';
 
-      setMetrics({ attention, confidence, stress, eyeContact, emotion, posture });
+      setMetrics({ attention, confidence, stress, eyeContact, emotion, posture, audioVolume });
     }, 1500);
 
     return () => {
@@ -350,7 +351,12 @@ export default function InterviewSessionPage() {
     await saveAnswer(false);
     setCompleting(true);
     try {
-      await sessionAPI.complete(session._id, { videoMetrics: facialMetrics });
+      await sessionAPI.complete(session._id, {
+        videoMetrics: {
+          ...facialMetrics,
+          audioVolume: facialMetrics.audioVolume ?? 0,
+        },
+      });
       toast.success('Session completed! Loading results...');
       navigate(`/sessions/${session._id}/results`);
     } catch (err) {
@@ -362,7 +368,7 @@ export default function InterviewSessionPage() {
     <div className={`flex items-center justify-center h-96 ${isLight ? 'iv-theme-light' : 'iv-theme-dark'}`}>
       <div className="text-center">
         <Zap className="w-12 h-12 text-brand-400 mx-auto mb-4 animate-pulse" />
-        <p className="text-slate-400">Loading your interview session...</p>
+        <p className="text-slate-400">Preparing your interview...</p>
       </div>
     </div>
   );

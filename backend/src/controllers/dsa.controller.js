@@ -134,11 +134,9 @@ try {
 }
 
 /**
- * Generate topic-wise DSA questions using:
- * 1. GitHub LeetCode merged_problems.json (primary)
- * 2. Kaggle Dataset (secondary)
- * 3. Hosted LeetCode API (fallback)
- * 4. Groq LLM (last resort)
+ * Generate topic-wise DSA questions from local datasets only
+ * (merged_problems.json, kaggle dsa_questions.json, then templates).
+ * AI is not used for DSA question generation.
  */
 const generateDSAQuestions = async (req, res, next) => {
   const { topic = 'arrays', difficulty = 'Medium', count = 1, language = 'python' } = req.body;
@@ -244,66 +242,16 @@ const generateDSAQuestions = async (req, res, next) => {
     });
   }
 
-  // Fallback to Groq generator if dataset/API are empty
-  try {
-    const prompt = `You are a NeetCode 150 & LeetCode expert interviewer.
-Generate ${numQuestions} distinct, high-quality DSA coding interview questions for topic: "${topic}" at difficulty level: "${difficulty}".
-
-Return strictly a JSON object with a "problems" array. Each problem MUST include:
-{
-  "title": "Problem Title",
-  "slug": "kebab-case-slug",
-  "topic": "${topic}",
-  "difficulty": "${difficulty}",
-  "description": "Markdown formatted detailed problem statement with Examples and Constraints",
-  "testCases": [
-    { "input": "sample input string", "expected": "sample expected string" },
-    { "input": "sample input string 2", "expected": "sample expected string 2" }
-  ],
-  "hints": ["Hint 1", "Hint 2"],
-  "starterCode": {
-    "python": "def functionName(...):\\n    pass\\n",
-    "javascript": "var functionName = function(...) {\\n};\\n",
-    "java": "class Solution {\\n}\\n",
-    "cpp": "class Solution {\\n};\\n"
-  },
-  "expectedComplexity": { "time": "O(N)", "space": "O(1)" }
-}`;
-
-    const response = await nvidia.chat.completions.create({
-      messages: [
-        { role: 'system', content: 'You are an expert DSA coding interview platform generator. Output valid JSON only.' },
-        { role: 'user', content: prompt }
-      ],
-      temperature: 0.7,
-      max_tokens: 4096,
-      response_format: { type: 'json_object' }
-    });
-
-    const content = response.choices[0]?.message?.content;
-    let parsed = parseAIJSON(content);
-    const problems = (parsed.problems || []).slice(0, numQuestions);
-
-    res.status(200).json({
-      success: true,
-      topic,
-      difficulty,
-      language,
-      count: problems.length,
-      problems
-    });
-  } catch (err) {
-    logger.error('Error generating DSA questions:', err);
-    const fallback = NEETCODE_TOPIC_TEMPLATES[topic] || NEETCODE_TOPIC_TEMPLATES.arrays;
-    res.status(200).json({
-      success: true,
-      topic,
-      difficulty,
-      language,
-      count: fallback.length,
-      problems: fallback
-    });
-  }
+  const fallback = NEETCODE_TOPIC_TEMPLATES[topic] || NEETCODE_TOPIC_TEMPLATES.arrays;
+  return res.status(200).json({
+    success: true,
+    source: 'template',
+    topic,
+    difficulty,
+    language,
+    count: fallback.length,
+    problems: fallback
+  });
 };
 
 /**

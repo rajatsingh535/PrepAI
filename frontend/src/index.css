@@ -158,41 +158,59 @@
   }
 }
 
-/* ── Interview / DSA light theme (white) ───────────────────── */
+/* ── Interview / DSA professional theme ────────────────────── */
+.iv-theme-light,
+.iv-theme-dark {
+  font-family: 'Space Grotesk', system-ui, sans-serif;
+}
+
 .iv-theme-light {
-  background: #ffffff;
-  color: #18181b;
+  background: #f4f6f9;
+  color: #1e293b;
 }
 .iv-theme-light .card,
 .iv-theme-light .card-flat {
   background: #ffffff !important;
-  border-color: #e4e4e7 !important;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 8px 24px rgba(0,0,0,0.04) !important;
+  border-color: #dbe3ee !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05), 0 8px 24px rgba(15, 23, 42, 0.04) !important;
 }
-.iv-theme-light .text-white { color: #18181b !important; }
+.iv-theme-light .text-white { color: #0f172a !important; }
 .iv-theme-light .text-slate-300,
-.iv-theme-light .text-slate-400 { color: #52525b !important; }
+.iv-theme-light .text-slate-400 { color: #475569 !important; }
 .iv-theme-light .text-slate-500,
-.iv-theme-light .text-slate-600 { color: #71717a !important; }
+.iv-theme-light .text-slate-600 { color: #64748b !important; }
 .iv-theme-light .form-input,
 .iv-theme-light .form-textarea,
 .iv-theme-light .form-select {
-  background: #fafafa !important;
-  color: #18181b !important;
-  border-color: #d4d4d8 !important;
+  background: #f8fafc !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
 }
-.iv-theme-light .form-label { color: #52525b !important; }
+.iv-theme-light .form-label { color: #334155 !important; letter-spacing: 0.04em; }
+.iv-theme-light .btn-primary {
+  background: #1e3a5f !important;
+  color: #ffffff !important;
+  box-shadow: none !important;
+}
+.iv-theme-light .btn-primary:hover { background: #16304e !important; }
 .iv-theme-light .btn-secondary {
-  color: #18181b !important;
-  border-color: #d4d4d8 !important;
+  color: #1e3a5f !important;
+  border-color: #cbd5e1 !important;
+  background: #ffffff !important;
 }
-.iv-theme-light .btn-ghost { color: #52525b !important; }
-.iv-theme-light .bg-surface { background: #f4f4f5 !important; }
+.iv-theme-light .btn-ghost { color: #475569 !important; }
+.iv-theme-light .bg-surface { background: #eef2f7 !important; }
 .iv-theme-light .border-surface-border,
 .iv-theme-light .border-white\/\[0\.06\],
-.iv-theme-light .border-white\/\[0\.08\] { border-color: #e4e4e7 !important; }
+.iv-theme-light .border-white\/\[0\.08\] { border-color: #dbe3ee !important; }
+.iv-theme-light .progress-bar { background: #e2e8f0 !important; }
+.iv-theme-light .progress-fill { background: #1e3a5f !important; }
 
 .iv-theme-dark {
-  background: #090d16;
-  color: #e4e4e7;
+  background: #0f172a;
+  color: #e2e8f0;
+}
+.iv-theme-dark .btn-primary {
+  background: #94a3b8 !important;
+  color: #0f172a !important;
 }

@@ -14,7 +14,7 @@ const storedTheme = typeof window !== 'undefined' ? localStorage.getItem('prepai
 const initialState = {
   isSidebarOpen:    false,
   isGlobalLoading:  false,
-  theme:            storedTheme === 'light' || storedTheme === 'dark' ? storedTheme : 'dark',
+  theme:            storedTheme === 'light' || storedTheme === 'dark' ? storedTheme : 'light',
 };
 
 const APP_ACTIONS = {
