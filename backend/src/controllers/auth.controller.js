@@ -5,7 +5,7 @@ const { sendTokenResponse } = require('../utils/jwt.utils');
 
 const ADMIN_EMAIL = 'aftab@admin.com';
 
-// ─── POST /api/auth/register ───────────────────────────────────────
+// Register new user
 exports.register = async (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
@@ -19,13 +19,13 @@ exports.register = async (req, res, next) => {
     return next(new AppError('An account with this email already exists.', 409));
   }
 
-  // Assign super_admin role automatically for the designated admin email
+  // Set admin role for admin email
   const role = email.toLowerCase() === ADMIN_EMAIL ? 'super_admin' : 'candidate';
   const user = await User.create({ name, email, password, role });
   sendTokenResponse(user, 201, res);
 };
 
-// ─── POST /api/auth/login ─────────────────────────────────────────
+// User login
 exports.login = async (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
@@ -47,7 +47,7 @@ exports.login = async (req, res, next) => {
     return next(new AppError('Your account has been banned due to violation of terms.', 403));
   }
 
-  // Ensure admin email always has super_admin role (self-healing)
+  // Fix admin role if needed
   if (email.toLowerCase() === ADMIN_EMAIL && user.role !== 'super_admin') {
     user.role = 'super_admin';
   }
@@ -59,7 +59,7 @@ exports.login = async (req, res, next) => {
   sendTokenResponse(user, 200, res);
 };
 
-// ─── POST /api/auth/refresh ────────────────────────────────────────
+// Refresh access token
 exports.refreshToken = async (req, res, next) => {
   const jwt = require('jsonwebtoken');
   const { refreshToken } = req.body;
@@ -82,13 +82,13 @@ exports.refreshToken = async (req, res, next) => {
   }
 };
 
-// ─── GET /api/auth/me ─────────────────────────────────────────────
+// Get current user
 exports.getMe = async (req, res) => {
   const user = await User.findById(req.user._id);
   res.status(200).json({ success: true, user });
 };
 
-// ─── POST /api/auth/logout ────────────────────────────────────────
+// Logout
 exports.logout = async (req, res) => {
   res.status(200).json({ success: true, message: 'Logged out successfully.' });
 };

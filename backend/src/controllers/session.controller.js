@@ -4,14 +4,14 @@ const User = require('../models/User.model');
 const AppError = require('../utils/AppError');
 const { evaluateAnswer, generateOverallFeedback } = require('../services/ai.service');
 
-// ─── POST /api/sessions/start ─────────────────────────────────────
+// Start new interview session
 exports.startSession = async (req, res, next) => {
   const { interviewId } = req.body;
 
   const interview = await Interview.findOne({ _id: interviewId, userId: req.user._id });
   if (!interview) return next(new AppError('Interview not found.', 404));
 
-  // Allow start if status is 'ready' OR if questions were generated despite a stale status
+  // Check if questions are available
   const hasQuestions = interview.questions && interview.questions.length > 0;
   if (!hasQuestions) {
     return next(new AppError('Interview questions have not been generated yet.', 400));
@@ -95,6 +95,7 @@ exports.completeSession = async (req, res, next) => {
   const sessionDuration = req.body.sessionDuration || 0;
 
   // ── AI Evaluate each answer with enhanced webcam/audio analysis ────
+  // Evaluate each answer with AI
   const evaluationPromises = session.answers.map(async (answer) => {
     if (answer.skipped || !answer.answerText) {
       answer.aiScore = 0;
@@ -131,7 +132,7 @@ exports.completeSession = async (req, res, next) => {
 
   await Promise.all(evaluationPromises);
 
-  // ── Generate comprehensive overall feedback ──────────────────────
+  // Generate overall feedback
   let overallData = {};
   try {
     overallData = await generateOverallFeedback({
@@ -155,7 +156,7 @@ exports.completeSession = async (req, res, next) => {
     };
   }
 
-  // ── Finalize session with enhanced data ──────────────────────────
+  // Finalize session data
   session.overallScore = overallData.overallScore || 70;
   session.technicalScore = overallData.technicalScore || 75;
   session.communicationScore = overallData.communicationScore || 70;

@@ -1,4 +1,5 @@
 const jwt = require('jsonwebtoken');
+const mongoose = require('mongoose');
 const User = require('../models/User.model');
 const AppError = require('../utils/AppError');
 
@@ -16,6 +17,14 @@ exports.protect = async (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    // Check MongoDB is actually connected before querying
+    if (mongoose.connection.readyState !== 1) {
+      return next(new AppError(
+        'Database is currently unavailable. Please whitelist your IP (49.156.100.27) in MongoDB Atlas → Network Access, then restart the backend.',
+        503
+      ));
+    }
 
     const user = await User.findById(decoded.id).select('+passwordChangedAt');
     if (!user) {

@@ -1,15 +1,4 @@
-/**
- * lib/axios.js
- *
- * Configured Axios instance:
- *  - Base URL from env
- *  - Request interceptor: attaches Bearer token
- *  - Response interceptor: auto-refresh on 401 with request queue
- *
- * NOTE: reads token from localStorage directly (not context) to avoid
- * circular dependency between this module and AuthContext.
- */
-
+// Configured Axios instance with token handling
 import axios from 'axios';
 
 const api = axios.create({
@@ -18,21 +7,19 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
-// ─── Helper: read token from Zustand persisted storage ───────────
-// Zustand persist wraps state as: { state: { accessToken, ... }, version: 0 }
+// Read token from localStorage
 const getStoredAuth = () => {
   try {
     const raw = localStorage.getItem('prepai-auth');
     if (!raw) return {};
     const parsed = JSON.parse(raw);
-    // Zustand persist format: { state: { ... } }
     return parsed?.state ?? parsed;
   } catch {
     return {};
   }
 };
 
-// ─── Request Interceptor ──────────────────────────────────────────
+// Request interceptor - add token
 api.interceptors.request.use(
   (config) => {
     const { accessToken } = getStoredAuth();
@@ -44,7 +31,7 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// ─── Response Interceptor: silent token refresh ───────────────────
+// Response interceptor - handle token refresh
 let isRefreshing = false;
 let failedQueue  = [];
 

@@ -21,3 +21,6 @@ backend/tmp-*
 # Large dataset files (download separately - too large for GitHub)
 backend/src/data/merged_problems.json
 
+
+# API credential test files (contains sensitive data)
+TEST_API_CREDENTIALS.md

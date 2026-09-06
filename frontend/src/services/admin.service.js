@@ -1,18 +1,11 @@
-/**
- * services/admin.service.js
- *
- * All admin API calls use the dedicated adminAxios instance (lib/adminAxios.js)
- * which reads the admin token from 'ai-admin-auth' localStorage — completely
- * separate from the regular user api instance.
- */
-
+// Admin API service - uses separate adminAxios instance
 import adminApi from '@/lib/adminAxios';
 
-// ── Stats ──────────────────────────────────────────────────────────
+// Stats
 export const getAdminStats = () =>
   adminApi.get('/admin/stats').then((r) => r.data.data);
 
-// ── Users ──────────────────────────────────────────────────────────
+// Users
 export const getAdminUsers = (params) =>
   adminApi.get('/admin/users', { params }).then((r) => r.data.data);
 
@@ -28,28 +21,28 @@ export const deleteAdminUser = (id) =>
 export const bulkAdminUsersAction = (action, userIds) =>
   adminApi.post('/admin/users/bulk', { action, userIds }).then((r) => r.data);
 
-// ── Interviews ─────────────────────────────────────────────────────
+// Interviews
 export const getAdminInterviews = (params) =>
   adminApi.get('/admin/interviews', { params }).then((r) => r.data.data);
 
 export const deleteAdminInterview = (id) =>
   adminApi.delete(`/admin/interviews/${id}`).then((r) => r.data);
 
-// ── Sessions ───────────────────────────────────────────────────────
+// Sessions
 export const getAdminSessions = (params) =>
   adminApi.get('/admin/sessions', { params }).then((r) => r.data.data);
 
 export const deleteAdminSession = (id) =>
   adminApi.delete(`/admin/sessions/${id}`).then((r) => r.data);
 
-// ── Resumes ────────────────────────────────────────────────────────
+// Resumes
 export const getAdminResumes = (params) =>
   adminApi.get('/admin/resumes', { params }).then((r) => r.data.data);
 
 export const deleteAdminResume = (id) =>
   adminApi.delete(`/admin/resumes/${id}`).then((r) => r.data);
 
-// ── Jobs ───────────────────────────────────────────────────────────
+// Jobs
 export const getAdminJobs = (params) =>
   adminApi.get('/admin/jobs', { params }).then((r) => r.data.data);
 
@@ -71,7 +64,7 @@ export const deleteAdminJob = (id) =>
 export const bulkAdminJobsAction = (action, jobIds) =>
   adminApi.post('/admin/jobs/bulk', { action, jobIds }).then((r) => r.data);
 
-// ── Scraper ────────────────────────────────────────────────────────
+// Scraper
 export const getAdminScraperStatus = () =>
   adminApi.get('/admin/scraper/status').then((r) => r.data);
 
@@ -90,7 +83,7 @@ export const resumeAdminScraper = () =>
 export const getAdminScraperLogs = (params) =>
   adminApi.get('/admin/scraper/logs', { params }).then((r) => r.data.data);
 
-// ── Templates ──────────────────────────────────────────────────────
+// Templates
 export const getAdminTemplates = (params) =>
   adminApi.get('/admin/templates', { params }).then((r) => r.data.data);
 
@@ -106,7 +99,7 @@ export const updateAdminTemplate = (id, payload) =>
 export const deleteAdminTemplate = (id) =>
   adminApi.delete(`/admin/templates/${id}`).then((r) => r.data);
 
-// ── Prompts ────────────────────────────────────────────────────────
+// Prompts
 export const getAdminPrompts = () =>
   adminApi.get('/admin/prompts').then((r) => r.data.data);
 
@@ -119,7 +112,7 @@ export const updateAdminPrompt = (id, payload) =>
 export const restoreAdminPromptVersion = (id, targetVersion) =>
   adminApi.post(`/admin/prompts/${id}/restore`, { targetVersion }).then((r) => r.data);
 
-// ── Plans ──────────────────────────────────────────────────────────
+// Plans
 export const getAdminPlans = (params) =>
   adminApi.get('/admin/plans', { params }).then((r) => r.data.data);
 
@@ -138,7 +131,7 @@ export const updateAdminPlan = (id, payload) =>
 export const deleteAdminPlan = (id) =>
   adminApi.delete(`/admin/plans/${id}`).then((r) => r.data);
 
-// ── Payments ───────────────────────────────────────────────────────
+// Payments
 export const getAdminTransactions = (params) =>
   adminApi.get('/admin/payments/transactions', { params }).then((r) => r.data.data);
 
@@ -151,17 +144,17 @@ export const refundAdminTransaction = (id, reason) =>
 export const getAdminWebhookLogs = (params) =>
   adminApi.get('/admin/payments/webhooks', { params }).then((r) => r.data.data);
 
-// ── Settings ───────────────────────────────────────────────────────
+// Settings
 export const getAdminSettings = () =>
   adminApi.get('/admin/settings').then((r) => r.data.settings);
 
 export const saveAdminSettings = (payload) =>
   adminApi.patch('/admin/settings', payload).then((r) => r.data.settings);
 
-// ── Analytics ──────────────────────────────────────────────────────
+// Analytics
 export const getAdminAnalytics = (params) =>
   adminApi.get('/admin/analytics/stats', { params }).then((r) => r.data);
 
-// ── Logs ───────────────────────────────────────────────────────────
+// Logs
 export const getAdminLogs = (params) =>
   adminApi.get('/admin/logs', { params }).then((r) => r.data.data);
